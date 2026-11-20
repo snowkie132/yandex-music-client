@@ -392,22 +392,6 @@
                         >{{ c.ch }}</span
                       ></span
                     ></template
-                  ><template
-                    v-else-if="
-                      wordKaraoke && leavingIndex === i && leavingWords.length
-                    "
-                    ><span
-                      v-for="(w, wi) in leavingWords"
-                      :key="`l${leavingKey}-${wi}`"
-                      class="karaoke-word whitespace-pre-wrap"
-                      ><span
-                        v-for="(c, ci) in w.chars"
-                        :key="`l${leavingKey}-${wi}-${ci}`"
-                        class="karaoke-glyph is-leaving"
-                        :style="c.style"
-                        >{{ c.ch }}</span
-                      ></span
-                    ></template
                   ><template v-else-if="line.text">{{ line.text }}</template
                   ><span
                     v-else-if="dotsAllowed(i)"
@@ -1067,36 +1051,7 @@ const karaokeWords = computed<KaraokeWord[]>(() => {
   );
 });
 
-const leavingIndex = ref(-1);
-const leavingKey = ref(0);
-let leaveTimer: number | null = null;
-
-const leavingWords = computed<KaraokeWord[]>(() => {
-  const index = leavingIndex.value;
-  if (!wordKaraoke.value || index < 0) return [];
-  const text = lines.value[index]?.text || "";
-  const total = Array.from(text).length;
-  return buildKaraokeWords(text, total, Math.min(16, 220 / total));
-});
-
-watch(
-  () => player.activeLine,
-  (index, previous) => {
-    if (previous === undefined || previous < 0 || index === previous) return;
-    leavingIndex.value = previous;
-    leavingKey.value += 1;
-    if (leaveTimer !== null) window.clearTimeout(leaveTimer);
-    leaveTimer = window.setTimeout(() => {
-      leavingIndex.value = -1;
-      leaveTimer = null;
-    }, 650);
-  },
-);
-
-onBeforeUnmount(() => {
-  if (leaveTimer !== null) window.clearTimeout(leaveTimer);
-  stopScrollAnimation();
-});
+onBeforeUnmount(stopScrollAnimation);
 
 function karaokeWordActive(i: number): boolean {
   return (
@@ -1120,7 +1075,6 @@ watch(
     translateReplace,
   ],
   () => {
-    leavingIndex.value = -1;
     memoKey.value += 1;
   },
 );
@@ -1367,7 +1321,7 @@ function lineClass(i: number) {
     return [
       LINE_BASE,
       align,
-      "text-[color:rgba(255,255,255,calc(var(--lyrics-inactive,0.32)_*_0.62))]",
+      "text-[color:rgba(255,255,255,var(--lyrics-inactive,0.32))]",
       hoverBase,
       hoverColor,
     ].join(" ");
@@ -1492,11 +1446,6 @@ watch(
   animation-delay: calc(var(--lead, 0ms) + var(--i, 0) * var(--stagger, 0ms));
 }
 
-.karaoke-glyph.is-leaving {
-  animation: karaoke-glyph-out 220ms cubic-bezier(0.33, 0, 0.2, 1) both;
-  animation-delay: calc(var(--i, 0) * var(--stagger, 0ms));
-}
-
 @keyframes karaoke-glyph-in {
   from {
     opacity: 0;
@@ -1505,17 +1454,6 @@ watch(
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes karaoke-glyph-out {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-3.4px);
   }
 }
 
