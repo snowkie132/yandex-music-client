@@ -600,7 +600,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { QScrollArea } from "quasar";
 import { useRoute, useRouter } from "vue-router";
 import LyricsSettingsPanel from "@/components/player/LyricsSettingsPanel.vue";
@@ -1395,16 +1395,35 @@ function onStageWheel(event: WheelEvent) {
   target.scrollTop = Math.min(max, Math.max(0, target.scrollTop + step));
 }
 
+function scrollToActive(animate: boolean, attempt = 6) {
+  const i = player.activeLine;
+  if (!synced.value || i < 0) return;
+  const el = lineRefs.value[i];
+  const area = scroller.value;
+  const height = area?.$el.clientHeight ?? 0;
+  if (!el || !area || height <= 0) {
+    if (attempt > 0) requestAnimationFrame(() => scrollToActive(animate, attempt - 1));
+    return;
+  }
+  const target = Math.max(0, el.offsetTop - height * 0.42);
+  area.setScrollPosition(
+    "vertical",
+    target,
+    animate && s.value.motion ? 360 : 0,
+  );
+}
+
 watch(
   () => player.activeLine,
-  (i) => {
-    if (!synced.value || i < 0) return;
-    const el = lineRefs.value[i];
-    const area = scroller.value;
-    if (!el || !area) return;
-    const target = Math.max(0, el.offsetTop - area.$el.clientHeight * 0.42);
-    area.setScrollPosition("vertical", target, s.value.motion ? 360 : 0);
+  () => scrollToActive(true),
+);
+
+watch(
+  [() => player.showLyrics, () => player.lyrics, () => lines.value.length],
+  () => {
+    void nextTick(() => scrollToActive(false));
   },
+  { flush: "post", immediate: true },
 );
 
 watch(
