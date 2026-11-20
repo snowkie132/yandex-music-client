@@ -42,6 +42,7 @@ pub fn run() {
         .manage(together::TogetherState::default())
         .manage(together::relay::RelayState::default())
         .setup(|app| {
+            proxy::start_local_server();
             for (_, window) in app.webview_windows() {
                 if let Ok(icon) =
                     tauri::image::Image::from_bytes(include_bytes!("../icons/256x256.png"))
@@ -63,6 +64,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::prefetch_stream,
             commands::clear_stream_cache,
+            commands::stream_base,
             commands::auth_login,
             commands::auth_me,
             commands::auth_logout,

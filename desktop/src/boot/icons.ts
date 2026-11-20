@@ -1,6 +1,18 @@
 import { boot } from "quasar/wrappers";
 import { h, defineComponent, type PropType } from "vue";
-import { Icon as IconifyIcon } from "@iconify/vue";
+import { Icon as IconifyIcon, addCollection } from "@iconify/vue";
+import mingcute from "@iconify-json/mingcute/icons.json";
+import simpleIcons from "@iconify-json/simple-icons/icons.json";
+import gravityUi from "@iconify-json/gravity-ui/icons.json";
+import maki from "@iconify-json/maki/icons.json";
+
+// api.iconify.design может быть недоступен (или медленный), из-за чего иконки
+// не отрисовывались. Регистрируем используемые наборы локально.
+type Collection = Parameters<typeof addCollection>[0];
+addCollection(mingcute as Collection);
+addCollection(simpleIcons as Collection);
+addCollection(gravityUi as Collection);
+addCollection(maki as Collection);
 
 const GlobalIcon = defineComponent({
   name: "AppIcon",

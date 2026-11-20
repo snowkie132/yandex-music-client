@@ -20,6 +20,11 @@ pub fn clear_stream_cache() {
 }
 
 #[tauri::command]
+pub fn stream_base() -> String {
+    crate::proxy::base().unwrap_or_default().to_string()
+}
+
+#[tauri::command]
 pub async fn prefetch_stream(url: String) -> Result<(), String> {
     crate::proxy::warm(url).await;
     Ok(())

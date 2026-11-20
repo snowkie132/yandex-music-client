@@ -18,7 +18,7 @@ export default defineConfig(() => {
   const commit = gitInfo();
 
   return {
-    boot: ["native", "auth", "icons"],
+    boot: ["native", "auth", "icons", "stream"],
 
     css: ["tailwind.css"],
 

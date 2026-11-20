@@ -155,7 +155,8 @@ fn rewrite_playlist(body: &[u8], base: &str) -> Option<Vec<u8>> {
         if !trimmed.starts_with('#') {
             let resolved = base.join(trimmed).ok()?.to_string();
             out.push_str(&format!(
-                "{SCHEME_HOST}/{}",
+                "{}/{}",
+                stream_host(),
                 encode_component(&resolved)
             ));
         } else if let Some(pos) = trimmed.find("URI=\"") {
@@ -166,7 +167,8 @@ fn rewrite_playlist(body: &[u8], base: &str) -> Option<Vec<u8>> {
                     Ok(resolved) => {
                         out.push_str(&trimmed[..head]);
                         out.push_str(&format!(
-                            "{SCHEME_HOST}/{}",
+                            "{}/{}",
+                            stream_host(),
                             encode_component(&resolved.to_string())
                         ));
                         out.push('"');
@@ -185,6 +187,18 @@ fn rewrite_playlist(body: &[u8], base: &str) -> Option<Vec<u8>> {
 }
 
 const SCHEME_HOST: &str = "http://ymstream.localhost";
+
+static LOCAL_BASE: OnceLock<String> = OnceLock::new();
+
+pub fn base() -> Option<&'static str> {
+    LOCAL_BASE.get().map(String::as_str)
+}
+
+fn stream_host() -> String {
+    base()
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| SCHEME_HOST.to_string())
+}
 
 fn mime_for(url: &str) -> &'static str {
     let clean = url.split('?').next().unwrap_or(url).to_lowercase();
@@ -510,4 +524,102 @@ pub fn handle(request: Request<Vec<u8>>, responder: UriSchemeResponder) {
     tauri::async_runtime::spawn(async move {
         responder.respond(fetch(target, range).await);
     });
+}
+
+/// WebKitGTK не умеет проигрывать медиа с кастомных схем (ymstream), поэтому
+/// параллельно поднимаем обычный http-сервер на loopback и отдаём через него.
+pub fn start_local_server() {
+    tauri::async_runtime::spawn(async move {
+        let listener = match tokio::net::TcpListener::bind(("127.0.0.1", 0)).await {
+            Ok(listener) => listener,
+            Err(error) => {
+                eprintln!("[stream] локальный сервер не запустился: {error}");
+                return;
+            }
+        };
+        let Ok(address) = listener.local_addr() else {
+            return;
+        };
+        let base = format!("http://127.0.0.1:{}", address.port());
+        let _ = LOCAL_BASE.set(base.clone());
+        println!("[stream] локальный сервер слушает {base}");
+        loop {
+            let Ok((socket, _)) = listener.accept().await else {
+                continue;
+            };
+            tauri::async_runtime::spawn(async move {
+                let _ = serve_socket(socket).await;
+            });
+        }
+    });
+}
+
+async fn serve_socket(mut socket: tokio::net::TcpStream) -> Option<()> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut head: Vec<u8> = Vec::new();
+    let mut chunk = [0u8; 2048];
+    loop {
+        let read = socket.read(&mut chunk).await.ok()?;
+        if read == 0 {
+            return None;
+        }
+        head.extend_from_slice(&chunk[..read]);
+        if head.windows(4).any(|window| window == b"\r\n\r\n") {
+            break;
+        }
+        if head.len() > 32 * 1024 {
+            return None;
+        }
+    }
+
+    let text = String::from_utf8_lossy(&head);
+    let mut lines = text.split("\r\n");
+    let request_line = lines.next()?;
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or("GET").to_string();
+    let path = parts.next().unwrap_or("/").to_string();
+    let mut range: Option<String> = None;
+    for line in lines {
+        if let Some((name, value)) = line.split_once(':') {
+            if name.eq_ignore_ascii_case("range") {
+                range = Some(value.trim().to_string());
+            }
+        }
+    }
+
+    let response = if method == "OPTIONS" {
+        Response::builder()
+            .status(204)
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+            .header("Access-Control-Allow-Headers", "Range")
+            .header(
+                "Access-Control-Expose-Headers",
+                "Content-Length, Content-Range, Accept-Ranges",
+            )
+            .body(Vec::new())
+            .ok()?
+    } else {
+        fetch(percent_decode(path.trim_start_matches('/')), range).await
+    };
+
+    let status = response.status();
+    let mut head_out = format!(
+        "HTTP/1.1 {} {}\r\n",
+        status.as_u16(),
+        status.canonical_reason().unwrap_or("OK")
+    );
+    for (name, value) in response.headers() {
+        if let Ok(value) = value.to_str() {
+            head_out.push_str(&format!("{}: {}\r\n", name, value));
+        }
+    }
+    head_out.push_str("Connection: close\r\n\r\n");
+    socket.write_all(head_out.as_bytes()).await.ok()?;
+    if method != "HEAD" {
+        socket.write_all(response.body()).await.ok()?;
+    }
+    let _ = socket.shutdown().await;
+    Some(())
 }
