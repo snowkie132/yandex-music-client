@@ -555,6 +555,7 @@ pub fn start_local_server() {
 }
 
 async fn serve_socket(mut socket: tokio::net::TcpStream) -> Option<()> {
+    use futures_util::StreamExt;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     let mut head: Vec<u8> = Vec::new();
@@ -588,37 +589,104 @@ async fn serve_socket(mut socket: tokio::net::TcpStream) -> Option<()> {
         }
     }
 
-    let response = if method == "OPTIONS" {
-        Response::builder()
-            .status(204)
-            .header("Access-Control-Allow-Origin", "*")
-            .header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
-            .header("Access-Control-Allow-Headers", "Range")
-            .header(
-                "Access-Control-Expose-Headers",
-                "Content-Length, Content-Range, Accept-Ranges",
-            )
-            .body(Vec::new())
-            .ok()?
-    } else {
-        fetch(percent_decode(path.trim_start_matches('/')), range).await
+    if method == "OPTIONS" {
+        let response = concat!(
+            "HTTP/1.1 204 No Content\r\n",
+            "Access-Control-Allow-Origin: *\r\n",
+            "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n",
+            "Access-Control-Allow-Headers: Range\r\n",
+            "Connection: close\r\n\r\n",
+        );
+        socket.write_all(response.as_bytes()).await.ok()?;
+        let _ = socket.shutdown().await;
+        return Some(());
+    }
+
+    let target = percent_decode(path.trim_start_matches('/'));
+    if !target.starts_with("http://") && !target.starts_with("https://") {
+        socket
+            .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+            .await
+            .ok()?;
+        return Some(());
+    }
+
+    let Some(client) = http() else {
+        socket
+            .write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+            .await
+            .ok()?;
+        return Some(());
+    };
+    let mut request = client.get(&target);
+    if let Some(value) = range {
+        request = request.header("Range", value);
+    }
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(_) => {
+            socket
+                .write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+                .await
+                .ok()?;
+            return Some(());
+        }
     };
 
     let status = response.status();
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let playlist = content_type.to_lowercase().contains("mpegurl")
+        || target.to_lowercase().contains(".m3u8");
+
     let mut head_out = format!(
         "HTTP/1.1 {} {}\r\n",
         status.as_u16(),
         status.canonical_reason().unwrap_or("OK")
     );
-    for (name, value) in response.headers() {
-        if let Ok(value) = value.to_str() {
-            head_out.push_str(&format!("{}: {}\r\n", name, value));
+    head_out.push_str("Access-Control-Allow-Origin: *\r\n");
+    if playlist {
+        let body = response.bytes().await.ok()?;
+        let body = rewrite_playlist(&body, &target).unwrap_or_else(|| body.to_vec());
+        head_out.push_str("Content-Type: application/vnd.apple.mpegurl\r\n");
+        head_out.push_str(&format!("Content-Length: {}\r\n", body.len()));
+        head_out.push_str("Connection: close\r\n\r\n");
+        socket.write_all(head_out.as_bytes()).await.ok()?;
+        if method != "HEAD" {
+            socket.write_all(&body).await.ok()?;
         }
-    }
-    head_out.push_str("Connection: close\r\n\r\n");
-    socket.write_all(head_out.as_bytes()).await.ok()?;
-    if method != "HEAD" {
-        socket.write_all(response.body()).await.ok()?;
+    } else {
+        for name in [
+            "content-type",
+            "content-length",
+            "content-range",
+            "accept-ranges",
+            "last-modified",
+            "etag",
+        ] {
+            if let Some(value) = response.headers().get(name) {
+                if let Ok(value) = value.to_str() {
+                    head_out.push_str(&format!("{}: {}\r\n", name, value));
+                }
+            }
+        }
+        head_out.push_str("Connection: close\r\n\r\n");
+        socket.write_all(head_out.as_bytes()).await.ok()?;
+        if method != "HEAD" {
+            let mut stream = response.bytes_stream();
+            while let Some(part) = stream.next().await {
+                let Ok(part) = part else {
+                    break;
+                };
+                if socket.write_all(&part).await.is_err() {
+                    break;
+                }
+            }
+        }
     }
     let _ = socket.shutdown().await;
     Some(())
