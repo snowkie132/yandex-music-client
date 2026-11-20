@@ -18,6 +18,7 @@ import {
   resetNormalization,
   setNormalization,
   setOutputVolume,
+  ensureAudioRunning,
   safePlay,
   warmNext,
   resumeOnGesture,
@@ -179,7 +180,6 @@ let lastLoadAt = 0;
 let stallTimer: number | null = null;
 let stallAt = 0;
 let stallSince = 0;
-let recoverStep = 0;
 let lastRecover = 0;
 let radioStarted = false;
 let previewAdvancing = false;
@@ -207,6 +207,16 @@ interface PreviewSnapshot {
 }
 
 let previewSnapshot: PreviewSnapshot | null = null;
+
+function bufferedAhead(time: number): number {
+  const ranges = audio.buffered;
+  for (let index = 0; index < ranges.length; index += 1) {
+    if (ranges.start(index) <= time && time <= ranges.end(index)) {
+      return ranges.end(index) - time;
+    }
+  }
+  return 0;
+}
 
 function clearPreviewTimers(): void {
   if (previewFadeTimer !== null) {
@@ -433,7 +443,6 @@ export const usePlayerStore = defineStore("player", {
       audio.onplaying = () => {
         stallAt = audio.currentTime;
         stallSince = 0;
-        recoverStep = 0;
       };
       audio.onerror = () => {
         if (!this.current || this.loading) return;
@@ -1091,7 +1100,6 @@ export const usePlayerStore = defineStore("player", {
             : 0;
       stallAt = startAt;
       stallSince = 0;
-      recoverStep = 0;
       try {
         if (fadeMs > 0 && !previewWasFaded)
           await fadeOut(Math.min(fadeMs, 1200));
@@ -1852,6 +1860,7 @@ export const usePlayerStore = defineStore("player", {
     },
 
     watchStall() {
+      if (!audio.paused) ensureAudioRunning();
       if (!this.current || audio.paused || this.loading || this.pendingResume) {
         stallAt = audio.currentTime;
         stallSince = 0;
@@ -1860,7 +1869,6 @@ export const usePlayerStore = defineStore("player", {
       if (Math.abs(audio.currentTime - stallAt) > 0.05) {
         stallAt = audio.currentTime;
         stallSince = 0;
-        recoverStep = 0;
         return;
       }
       const now = Date.now();
@@ -1880,15 +1888,11 @@ export const usePlayerStore = defineStore("player", {
       const track = this.current;
       if (!track) return;
       const position = Number.isFinite(at) && at > 0 ? at : this.progress;
-      recoverStep = hard ? 3 : recoverStep + 1;
-      log.warn(
-        "playback stuck, recovering",
-        track.title,
-        position,
-        recoverStep,
-      );
+      const ahead = bufferedAhead(audio.currentTime);
+      log.warn("playback stuck, recovering", track.title, position, ahead, hard);
 
-      if (recoverStep < 3) {
+      // Данные впереди есть — залип декодер/позиция, хватает толчка seek'ом.
+      if (!hard && ahead > 1.5) {
         try {
           audio.currentTime = Math.max(0, position + 0.4);
         } catch {}
@@ -1896,8 +1900,10 @@ export const usePlayerStore = defineStore("player", {
         return;
       }
 
-      recoverStep = 0;
+      // Буфера нет: поток умер (протух URL, прокси не отдал чанк). Берём
+      // свежий stream-URL и перезагружаем трек с той же позиции.
       prefetched.delete(track.id);
+      void api.clearStreamCache().catch(() => undefined);
       await this.loadCurrent({ startAt: position, autoplay: true });
     },
 

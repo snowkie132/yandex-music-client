@@ -12,7 +12,7 @@
   >
     <div
       v-if="s.backdrop === 'cover' && coverUrl"
-      class="absolute z-[-3] inset-0 opacity-[var(--lyrics-bg-opacity)] bg-center bg-cover [transform:scale(1.06)] transition-opacity duration-[500ms] ease-[ease]"
+      class="absolute z-[-3] inset-[-40px] opacity-[var(--lyrics-bg-opacity)] bg-center bg-cover [filter:blur(14px)] [transform:scale(1.04)] transition-opacity duration-[500ms] ease-[ease]"
       :style="{ backgroundImage: `url(${coverUrl})` }"
     />
     <div
@@ -380,11 +380,13 @@
                   }}</template
                   ><template v-else-if="karaokeWordActive(i)"
                     ><span
-                      v-for="(w, wi) in activeWords"
-                      :key="wi"
-                      class="whitespace-pre-wrap text-transparent [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [background-image:linear-gradient(90deg,#fff_0%,#fff_var(--wp,0%),rgba(255,255,255,calc(var(--lyrics-inactive,0.32)_+_0.18))_var(--wp,0%),rgba(255,255,255,calc(var(--lyrics-inactive,0.32)_+_0.18))_100%)] [background-clip:text] [-webkit-background-clip:text]"
-                      :style="{ '--wp': wordFill(wi) + '%' }"
-                      >{{ w }}</span
+                      v-for="(c, ci) in karaokeChars"
+                      :key="ci"
+                      class="whitespace-pre-wrap"
+                      :class="c.on ? 'text-[color:#fff]' : 'text-transparent'"
+                      ><i v-if="ci === karaokeCaret" class="karaoke-caret" />{{
+                        c.ch
+                      }}</span
                     ></template
                   ><template v-else-if="line.text">{{ line.text }}</template
                   ><span
@@ -975,26 +977,24 @@ const activeWords = computed<string[]>(() => {
   return (line?.text || "").match(/\S+\s*/gu) ?? [];
 });
 
-const wordBounds = computed<Array<[number, number]>>(() => {
-  const words = activeWords.value;
-  const total = words.reduce((sum, w) => sum + w.length, 0) || 1;
-  let acc = 0;
-  return words.map((w) => {
-    const start = acc / total;
-    acc += w.length;
-    return [start, acc / total] as [number, number];
-  });
+// Печатная машинка: символы проявляются по одному, без градиентной заливки.
+const karaokeChars = computed<Array<{ ch: string; on: boolean }>>(() => {
+  if (!wordKaraoke.value) return [];
+  const text = lines.value[player.activeLine]?.text || "";
+  const chars = Array.from(text);
+  if (!chars.length) return [];
+  const typed = Math.floor((fill.value / 100) * chars.length);
+  return chars.map((ch, index) => ({ ch, on: index < typed }));
 });
 
-function wordFill(index: number): number {
-  const bounds = wordBounds.value[index];
-  if (!bounds) return 0;
-  const [start, end] = bounds;
-  const p = fill.value / 100;
-  if (p <= start) return 0;
-  if (p >= end) return 100;
-  return ((p - start) / (end - start || 1)) * 100;
-}
+const karaokeCaret = computed(() => {
+  if (!wordKaraoke.value) return -1;
+  const total = Array.from(lines.value[player.activeLine]?.text || "").length;
+  if (!total) return -1;
+  const typed = Math.floor((fill.value / 100) * total);
+  if (typed >= total) return -1;
+  return Math.max(0, Math.min(total - 1, typed));
+});
 
 function karaokeWordActive(i: number): boolean {
   return (
@@ -1314,6 +1314,27 @@ watch(
 </script>
 
 <style scoped>
+.karaoke-caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.88em;
+  margin-right: 0.07em;
+  vertical-align: -0.06em;
+  background: #fff;
+  animation: karaoke-caret-blink 1.05s steps(1, end) infinite;
+}
+
+@keyframes karaoke-caret-blink {
+  0%,
+  49% {
+    opacity: 0.9;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
 .lyrics-fs-anim {
   animation: lyrics-fs-in 0.24s ease;
 }

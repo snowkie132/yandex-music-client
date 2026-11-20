@@ -248,6 +248,15 @@ export function resumeAudioContext(): void {
   if (graph) void graph.context.resume().catch(() => undefined);
 }
 
+// WebKit иногда усыпляет AudioContext (смена устройства, сон, потеря фокуса).
+// Если не разбудить — звук пропадает, хотя позиция трека продолжает идти.
+export function ensureAudioRunning(): void {
+  if (!graph) return;
+  if (graph.context.state !== "running") {
+    void graph.context.resume().catch(() => undefined);
+  }
+}
+
 let analyser: AnalyserNode | null = null;
 let metricsBuffer: Float32Array<ArrayBuffer> | null = null;
 
