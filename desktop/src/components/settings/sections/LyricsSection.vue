@@ -129,17 +129,6 @@
           suffix="%"
           @update:model-value="ui.set('lyricsInactive', $event)"
         />
-
-        <SettingSlider
-          label="Размытие строк"
-          description="Размытие строк вокруг активной."
-          :model-value="ui.settings.lyricsLineBlur"
-          :min="0"
-          :max="8"
-          :step="0.5"
-          suffix=" px"
-          @update:model-value="ui.set('lyricsLineBlur', $event)"
-        />
       </SettingsCard>
 
       <SettingsCard>
@@ -161,17 +150,6 @@
             @update:model-value="ui.set('lyricsBackdrop', $event)"
           />
         </SettingsRow>
-
-        <SettingSlider
-          label="Размытие фона"
-          description="Размытие обложки за текстом."
-          :model-value="ui.settings.lyricsBackgroundBlur"
-          :min="0"
-          :max="90"
-          :step="1"
-          suffix=" px"
-          @update:model-value="ui.set('lyricsBackgroundBlur', $event)"
-        />
 
         <SettingSlider
           label="Яркость фона"
