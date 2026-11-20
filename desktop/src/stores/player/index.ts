@@ -1346,7 +1346,6 @@ export const usePlayerStore = defineStore("player", {
                 label: "FckCensorData",
                 source: "censor-replacement",
               });
-              void api.prefetchStream(censored).catch(() => undefined);
               return;
             }
           }
@@ -1379,7 +1378,6 @@ export const usePlayerStore = defineStore("player", {
               label: null,
               source: stream.source,
             });
-            await api.prefetchStream(stream.url).catch(() => undefined);
             log.info("prefetched from network", next.title, stream.codec);
           } catch (error) {
             log.warn("prefetch failed", next.title, error);
@@ -1613,7 +1611,6 @@ export const usePlayerStore = defineStore("player", {
           source: stream.source,
           requested: quality,
         });
-        await api.prefetchStream(stream.url).catch(() => undefined);
         audio.src = proxyStream(stream.url);
         const restore = () => {
           audio.removeEventListener("loadedmetadata", restore);
