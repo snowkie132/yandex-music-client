@@ -17,8 +17,9 @@
 
 1. `fix(linux): local http stream proxy` — WebKitGTK не умеет проигрывать медиа
    с кастомных схем, поэтому в `src-tauri/src/proxy.rs` поднят обычный HTTP-сервер
-   на loopback; фронтенд (`src/lib/stream.ts`, `src/boot/stream.ts`) берёт его адрес
-   командой `stream_base`.
+   на loopback. Запросы к CDN проксируются как есть (Range и заголовки без изменений),
+   переписываются только m3u8-плейлисты. Фронтенд (`src/lib/stream.ts`,
+   `src/boot/stream.ts`) берёт адрес сервера командой `stream_base`.
 2. `fix(linux): offline iconify collections` — `@iconify-json/{mingcute,simple-icons,gravity-ui,maki}`
    регистрируются через `addCollection` в `src/boot/icons.ts` (без сети).
 3. `fix: громкость через WebAudio gain` — `audio.volume` игнорируется, когда звук
