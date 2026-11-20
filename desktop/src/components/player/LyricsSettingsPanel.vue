@@ -187,21 +187,6 @@
           @input="onNum('lyricsInactive', $event)"
         />
       </label>
-
-      <label class="block mb-[11px]">
-        <span class="flex items-baseline justify-between gap-[8px] mb-[3px] text-[color:rgba(255,255,255,0.56)] text-[11.5px] [&_b]:text-[color:rgba(255,255,255,0.9)] [&_b]:tabular-nums [&_b]:font-[560]">
-          <span>Размытие строк</span><b>{{ s.lyricsLineBlur }} px</b>
-        </span>
-        <input
-          :class="RANGE_CLASS"
-          type="range"
-          min="0"
-          max="8"
-          step="0.5"
-          :value="s.lyricsLineBlur"
-          @input="onNum('lyricsLineBlur', $event)"
-        />
-      </label>
     </div>
 
     <div class="pt-[6px] px-[12px] pb-[10px] border-t border-[color:rgba(255,255,255,0.07)]">
@@ -218,21 +203,6 @@
           {{ item.label }}
         </button>
       </div>
-
-      <label class="block mb-[11px]">
-        <span class="flex items-baseline justify-between gap-[8px] mb-[3px] text-[color:rgba(255,255,255,0.56)] text-[11.5px] [&_b]:text-[color:rgba(255,255,255,0.9)] [&_b]:tabular-nums [&_b]:font-[560]">
-          <span>Размытие</span><b>{{ s.lyricsBackgroundBlur }} px</b>
-        </span>
-        <input
-          :class="RANGE_CLASS"
-          type="range"
-          min="0"
-          max="90"
-          step="1"
-          :value="s.lyricsBackgroundBlur"
-          @input="onNum('lyricsBackgroundBlur', $event)"
-        />
-      </label>
 
       <label class="block mb-[11px]">
         <span class="flex items-baseline justify-between gap-[8px] mb-[3px] text-[color:rgba(255,255,255,0.56)] text-[11.5px] [&_b]:text-[color:rgba(255,255,255,0.9)] [&_b]:tabular-nums [&_b]:font-[560]">

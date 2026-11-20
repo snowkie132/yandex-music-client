@@ -12,7 +12,7 @@
   >
     <div
       v-if="s.backdrop === 'cover' && coverUrl"
-      class="absolute z-[-3] inset-[calc(var(--lyrics-bg-blur)_*_-1.8)] opacity-[var(--lyrics-bg-opacity)] bg-center bg-cover [filter:blur(var(--lyrics-bg-blur))_saturate(1.35)] [transform:scale(1.08)] transition-[filter,opacity] duration-[500ms] ease-[ease]"
+      class="absolute z-[-3] inset-0 opacity-[var(--lyrics-bg-opacity)] bg-center bg-cover [transform:scale(1.06)] transition-opacity duration-[500ms] ease-[ease]"
       :style="{ backgroundImage: `url(${coverUrl})` }"
     />
     <div
@@ -1027,8 +1027,8 @@ let lastTick = 0;
 
 function tick(stamp = 0) {
   raf = requestAnimationFrame(tick);
-  // 30 Гц достаточно для заливки текста и вдвое дешевле 60 Гц
-  if (stamp - lastTick < 33) return;
+  // до 120 Гц — на 120-Гц экране заливка обновляется каждый кадр
+  if (stamp - lastTick < 8) return;
   lastTick = stamp;
   const index = player.activeLine;
   const list = lines.value;
@@ -1236,7 +1236,7 @@ function lineClass(i: number) {
     return [
       LINE_BASE,
       align,
-      "opacity-[0.74] [filter:blur(var(--lyrics-line-blur))]",
+      "opacity-[0.74]",
       "text-[color:rgba(255,255,255,var(--lyrics-inactive,0.32))]",
       hoverBase,
       hoverColor,
@@ -1246,7 +1246,7 @@ function lineClass(i: number) {
     return [
       LINE_BASE,
       align,
-      "text-[color:rgba(255,255,255,calc(var(--lyrics-inactive,0.32)_+_0.14))] [filter:blur(calc(var(--lyrics-line-blur)_*_0.45))]",
+      "text-[color:rgba(255,255,255,calc(var(--lyrics-inactive,0.32)_+_0.14))]",
       hoverBase,
       hoverColor,
     ].join(" ");
