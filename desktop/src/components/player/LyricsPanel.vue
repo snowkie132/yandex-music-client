@@ -380,13 +380,17 @@
                   }}</template
                   ><template v-else-if="karaokeWordActive(i)"
                     ><span
-                      v-for="(c, ci) in karaokeChars"
-                      :key="ci"
-                      class="whitespace-pre-wrap"
-                      :class="c.on ? 'text-[color:#fff]' : 'text-transparent'"
-                      ><i v-if="ci === karaokeCaret" class="karaoke-caret" />{{
-                        c.ch
-                      }}</span
+                      v-for="(w, wi) in karaokeWords"
+                      :key="`g${player.activeLine}-${wi}`"
+                      class="karaoke-word whitespace-pre-wrap"
+                      :class="w.active ? 'is-active' : ''"
+                      ><span
+                        v-for="(c, ci) in w.chars"
+                        :key="`g${player.activeLine}-${wi}-${ci}`"
+                        class="karaoke-glyph"
+                        :style="c.style"
+                        >{{ c.ch }}</span
+                      ></span
                     ></template
                   ><template v-else-if="line.text">{{ line.text }}</template
                   ><span
@@ -977,23 +981,60 @@ const activeWords = computed<string[]>(() => {
   return (line?.text || "").match(/\S+\s*/gu) ?? [];
 });
 
-// Печатная машинка: символы проявляются по одному, без градиентной заливки.
-const karaokeChars = computed<Array<{ ch: string; on: boolean }>>(() => {
-  if (!wordKaraoke.value) return [];
-  const text = lines.value[player.activeLine]?.text || "";
-  const chars = Array.from(text);
-  if (!chars.length) return [];
-  const typed = Math.floor((fill.value / 100) * chars.length);
-  return chars.map((ch, index) => ({ ch, on: index < typed }));
-});
+// Каскад по глифам: активное слово чуть крупнее, яркость растёт по ходу строки.
+interface KaraokeGlyph {
+  ch: string;
+  style: Record<string, string>;
+}
 
-const karaokeCaret = computed(() => {
-  if (!wordKaraoke.value) return -1;
-  const total = Array.from(lines.value[player.activeLine]?.text || "").length;
-  if (!total) return -1;
-  const typed = Math.floor((fill.value / 100) * total);
-  if (typed >= total) return -1;
-  return Math.max(0, Math.min(total - 1, typed));
+interface KaraokeWord {
+  active: boolean;
+  chars: KaraokeGlyph[];
+}
+
+const karaokeWords = computed<KaraokeWord[]>(() => {
+  const text = lines.value[player.activeLine]?.text || "";
+  if (!wordKaraoke.value || !text) return [];
+  const total = Array.from(text).length;
+  if (!total) return [];
+  const typed = (fill.value / 100) * total;
+  const stagger = Math.min(16, 320 / total);
+  const words: KaraokeWord[] = [];
+  let index = 0;
+  for (const raw of text.match(/\S+\s*/gu) ?? []) {
+    const chars: KaraokeGlyph[] = [];
+    for (const ch of raw) {
+      const passed =
+        Math.round(Math.max(0, Math.min(1, typed - index)) * 32) / 32;
+      const alpha = 0.38 + 0.62 * passed;
+      const style: Record<string, string> = {
+        "--i": String(index),
+        "--stagger": `${stagger}ms`,
+        color: `rgba(255,255,255,${alpha.toFixed(3)})`,
+      };
+      if (passed > 0.04) {
+        const core = (0.55 * passed).toFixed(2);
+        const halo = (0.25 * passed).toFixed(2);
+        style.textShadow =
+          `0 0 ${(2 + 3 * passed).toFixed(1)}px rgba(255,255,255,${core}), ` +
+          `0 0 ${(9 + 7 * passed).toFixed(1)}px rgba(255,255,255,${halo})`;
+      }
+      chars.push({ ch, style });
+      index += 1;
+    }
+    words.push({ active: false, chars });
+  }
+  const position = Math.min(total - 1, Math.max(0, Math.floor(typed)));
+  let offset = 0;
+  for (const word of words) {
+    const length = word.chars.length;
+    if (position < offset + length) {
+      word.active = true;
+      break;
+    }
+    offset += length;
+  }
+  return words;
 });
 
 function karaokeWordActive(i: number): boolean {
@@ -1301,7 +1342,7 @@ watch(
     const area = scroller.value;
     if (!el || !area) return;
     const target = Math.max(0, el.offsetTop - area.$el.clientHeight * 0.42);
-    area.setScrollPosition("vertical", target, s.value.motion ? 520 : 0);
+    area.setScrollPosition("vertical", target, s.value.motion ? 360 : 0);
   },
 );
 
@@ -1314,24 +1355,30 @@ watch(
 </script>
 
 <style scoped>
-.karaoke-caret {
+.karaoke-word {
   display: inline-block;
-  width: 2px;
-  height: 0.88em;
-  margin-right: 0.07em;
-  vertical-align: -0.06em;
-  background: #fff;
-  animation: karaoke-caret-blink 1.05s steps(1, end) infinite;
+  transform-origin: 50% 65%;
+  transition: transform 90ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-@keyframes karaoke-caret-blink {
-  0%,
-  49% {
-    opacity: 0.9;
-  }
-  50%,
-  100% {
+.karaoke-word.is-active {
+  transform: scale(1.13);
+}
+
+.karaoke-glyph {
+  display: inline-block;
+  animation: karaoke-glyph-in 240ms cubic-bezier(0.33, 0, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger, 0ms));
+}
+
+@keyframes karaoke-glyph-in {
+  from {
     opacity: 0;
+    transform: translateY(3.4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
