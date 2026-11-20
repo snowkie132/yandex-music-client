@@ -1023,13 +1023,9 @@ watch(
 );
 
 let raf = 0;
-let lastTick = 0;
 
-function tick(stamp = 0) {
+function tick() {
   raf = requestAnimationFrame(tick);
-  // до 120 Гц — на 120-Гц экране заливка обновляется каждый кадр
-  if (stamp - lastTick < 8) return;
-  lastTick = stamp;
   const index = player.activeLine;
   const list = lines.value;
   const line = index >= 0 ? list[index] : null;
