@@ -17,6 +17,7 @@ import {
   resumeAudioContext,
   resetNormalization,
   setNormalization,
+  setOutputVolume,
   safePlay,
   warmNext,
   resumeOnGesture,
@@ -320,7 +321,7 @@ export const usePlayerStore = defineStore("player", {
 
     bind() {
       if (useUiStore().settings.censorBypass) void ensureCensorList();
-      audio.volume = this.muted ? 0 : this.volume;
+      setOutputVolume(this.muted ? 0 : this.volume);
       audio.playbackRate = this.playbackRate;
       const startSettings = useUiStore().settings;
       if (startSettings.trimSilence || startSettings.gaplessEnabled) {
@@ -1986,13 +1987,13 @@ export const usePlayerStore = defineStore("player", {
     setVolume(v: number) {
       this.volume = v;
       this.muted = v === 0;
-      audio.volume = v;
+      setOutputVolume(v);
       this.persist();
     },
 
     toggleMute() {
       this.muted = !this.muted;
-      audio.volume = this.muted ? 0 : this.volume;
+      setOutputVolume(this.muted ? 0 : this.volume);
       this.persist();
     },
 

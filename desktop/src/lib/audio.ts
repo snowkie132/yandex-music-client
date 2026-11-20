@@ -66,16 +66,16 @@ function stopFade(): void {
 function ramp(from: number, to: number, ms: number): Promise<void> {
   stopFade();
   if (ms <= 0) {
-    audio.volume = Math.max(0, Math.min(1, to));
+    applyVolume(to);
     return Promise.resolve();
   }
   return new Promise((resolve) => {
     const step = 25;
     const started = Date.now();
-    audio.volume = Math.max(0, Math.min(1, from));
+    applyVolume(from);
     fadeTimer = window.setInterval(() => {
       const t = Math.min(1, (Date.now() - started) / ms);
-      audio.volume = Math.max(0, Math.min(1, from + (to - from) * t));
+      applyVolume(from + (to - from) * t);
       if (t >= 1) {
         stopFade();
         resolve();
@@ -86,13 +86,13 @@ function ramp(from: number, to: number, ms: number): Promise<void> {
 
 export async function fadeOut(ms: number): Promise<void> {
   if (ms <= 0 || audio.paused) return;
-  await ramp(audio.volume, 0, ms);
+  await ramp(currentVolume(), 0, ms);
 }
 
 export async function fadeIn(target: number, ms: number): Promise<void> {
   if (ms <= 0) {
     stopFade();
-    audio.volume = Math.max(0, Math.min(1, target));
+    applyVolume(target);
     return;
   }
   await ramp(0, target, ms);
@@ -100,7 +100,32 @@ export async function fadeIn(target: number, ms: number): Promise<void> {
 
 export function cancelFade(target: number): void {
   stopFade();
-  audio.volume = Math.max(0, Math.min(1, target));
+  applyVolume(target);
+}
+
+// Громкость нельзя менять через audio.volume, когда звук идёт через
+// AudioContext (эквалайзер/анализ): WebKitGTK в этом случае игнорирует
+// свойство. Поэтому держим громкость отдельным GainNode.
+let outputVolume = 1;
+
+function currentVolume(): number {
+  return graph ? outputVolume : audio.volume;
+}
+
+function applyVolume(value: number): void {
+  const next = Math.max(0, Math.min(1, value));
+  if (graph) {
+    try {
+      graph.volumeGain.gain.value = next;
+      return;
+    } catch {}
+  }
+  audio.volume = next;
+}
+
+export function setOutputVolume(value: number): void {
+  outputVolume = Math.max(0, Math.min(1, value));
+  applyVolume(outputVolume);
 }
 
 export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
@@ -112,6 +137,7 @@ interface Graph {
   filters: BiquadFilterNode[];
   normGain: GainNode;
   limiter: DynamicsCompressorNode;
+  volumeGain: GainNode;
   routed: boolean;
 }
 
@@ -149,7 +175,10 @@ function build(): Graph | null {
     limiter.attack.value = 0.003;
     limiter.release.value = 0.25;
     normGain.connect(limiter);
-    limiter.connect(context.destination);
+    const volumeGain = context.createGain();
+    volumeGain.gain.value = outputVolume;
+    limiter.connect(volumeGain);
+    volumeGain.connect(context.destination);
     const filters = EQ_BANDS.map((frequency, index) => {
       const filter = context.createBiquadFilter();
       filter.type =
@@ -178,8 +207,11 @@ function build(): Graph | null {
       filters,
       normGain,
       limiter,
+      volumeGain,
       routed: false,
     };
+    // дальше громкость регулирует volumeGain, элемент должен играть в полную
+    audio.volume = 1;
     source.connect(normGain);
     void context.resume().catch(() => undefined);
     return graph;

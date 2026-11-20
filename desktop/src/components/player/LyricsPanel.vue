@@ -367,6 +367,7 @@
               <button
                 v-for="(line, i) in lines"
                 :key="i"
+                v-memo="lineMemo(i)"
                 :ref="(el) => setLineRef(el, i)"
                 :class="lineClass(i)"
                 :style="i === player.activeLine ? fillStyle : undefined"
@@ -912,6 +913,22 @@ const karaoke = computed(
   () => s.value.highlight === "karaoke" && synced.value && player.showLyrics,
 );
 
+// v-memo для строк: перерисовываем на каждом кадре только активную строку,
+// иначе весь список из сотни строк пересобирается по 60 раз в секунду.
+const memoKey = ref(0);
+
+function lineMemo(i: number) {
+  const active = i === player.activeLine;
+  return [
+    active ? 1 : 0,
+    player.activeLine,
+    active ? Math.round(fill.value * 2) : 0,
+    active ? Math.round(dotsFill.value * 2) : 0,
+    dotsOut.value ? 1 : 0,
+    memoKey.value,
+  ];
+}
+
 const wordKaraoke = computed(
   () => karaoke.value && ui.settings.lyricsKaraokeWord,
 );
@@ -985,9 +1002,34 @@ function karaokeWordActive(i: number): boolean {
   );
 }
 
-let raf = 0;
+watch(
+  [
+    () => player.lyrics,
+    () => player.lyricsTranslation,
+    () => ui.settings.lyricsAlign,
+    () => ui.settings.lyricsGlow,
+    () => ui.settings.lyricsHighlight,
+    () => ui.settings.lyricsMotion,
+    () => ui.settings.lyricsKaraokeWord,
+    () => ui.settings.lyricsAnnotations,
+    () => ui.settings.lyricsAnnotationMark,
+    lineAnnotations,
+    wordKaraoke,
+    translateReplace,
+  ],
+  () => {
+    memoKey.value += 1;
+  },
+);
 
-function tick() {
+let raf = 0;
+let lastTick = 0;
+
+function tick(stamp = 0) {
+  raf = requestAnimationFrame(tick);
+  // 30 Гц достаточно для заливки текста и вдвое дешевле 60 Гц
+  if (stamp - lastTick < 33) return;
+  lastTick = stamp;
   const index = player.activeLine;
   const list = lines.value;
   const line = index >= 0 ? list[index] : null;
@@ -1003,7 +1045,6 @@ function tick() {
     const first = list[0]?.time_ms ?? 0;
     dotsFill.value = first > 0 ? gapProgress(now, first) : 0;
   }
-  raf = requestAnimationFrame(tick);
 }
 
 function stopTick() {
