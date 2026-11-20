@@ -922,8 +922,8 @@ function lineMemo(i: number) {
   return [
     active ? 1 : 0,
     player.activeLine,
-    active ? Math.round(fill.value * 2) : 0,
-    active ? Math.round(dotsFill.value * 2) : 0,
+    active ? fill.value : 0,
+    active ? dotsFill.value : 0,
     dotsOut.value ? 1 : 0,
     memoKey.value,
   ];
@@ -1023,13 +1023,26 @@ watch(
 );
 
 let raf = 0;
+let lastAudioMs = -1;
+let lastStamp = 0;
 
-function tick() {
+function tick(stamp = 0) {
   raf = requestAnimationFrame(tick);
   const index = player.activeLine;
   const list = lines.value;
   const line = index >= 0 ? list[index] : null;
-  const now = audio.currentTime * 1000;
+  // currentTime в WebKit обновляется реже кадров, поэтому между его
+  // обновлениями дорисовываем позицию по времени кадров — иначе заливка
+  // выглядит как 30 Гц.
+  const raw = audio.currentTime * 1000;
+  if (lastStamp === 0 || raw !== lastAudioMs) {
+    lastAudioMs = raw;
+    lastStamp = stamp;
+  }
+  const drift = player.isPlaying
+    ? Math.min(120, Math.max(0, stamp - lastStamp))
+    : 0;
+  const now = lastAudioMs + drift;
   if (line) {
     const start = line.time_ms;
     const end = list[index + 1]?.time_ms ?? start + 4200;
