@@ -392,6 +392,22 @@
                         >{{ c.ch }}</span
                       ></span
                     ></template
+                  ><template
+                    v-else-if="
+                      wordKaraoke && leavingIndex === i && leavingWords.length
+                    "
+                    ><span
+                      v-for="(w, wi) in leavingWords"
+                      :key="`l${leavingKey}-${wi}`"
+                      class="karaoke-word whitespace-pre-wrap"
+                      ><span
+                        v-for="(c, ci) in w.chars"
+                        :key="`l${leavingKey}-${wi}-${ci}`"
+                        class="karaoke-glyph is-leaving"
+                        :style="c.style"
+                        >{{ c.ch }}</span
+                      ></span
+                    ></template
                   ><template v-else-if="line.text">{{ line.text }}</template
                   ><span
                     v-else-if="dotsAllowed(i)"
@@ -992,13 +1008,14 @@ interface KaraokeWord {
   chars: KaraokeGlyph[];
 }
 
-const karaokeWords = computed<KaraokeWord[]>(() => {
-  const text = lines.value[player.activeLine]?.text || "";
-  if (!wordKaraoke.value || !text) return [];
+function buildKaraokeWords(
+  text: string,
+  typed: number,
+  stagger: number,
+  lead = 0,
+): KaraokeWord[] {
   const total = Array.from(text).length;
   if (!total) return [];
-  const typed = (fill.value / 100) * total;
-  const stagger = Math.min(16, 320 / total);
   const words: KaraokeWord[] = [];
   let index = 0;
   for (const raw of text.match(/\S+\s*/gu) ?? []) {
@@ -1010,6 +1027,7 @@ const karaokeWords = computed<KaraokeWord[]>(() => {
       const style: Record<string, string> = {
         "--i": String(index),
         "--stagger": `${stagger}ms`,
+        "--lead": `${lead}ms`,
         color: `rgba(255,255,255,${alpha.toFixed(3)})`,
       };
       if (passed > 0.04) {
@@ -1035,6 +1053,48 @@ const karaokeWords = computed<KaraokeWord[]>(() => {
     offset += length;
   }
   return words;
+}
+
+const karaokeWords = computed<KaraokeWord[]>(() => {
+  const text = lines.value[player.activeLine]?.text || "";
+  if (!wordKaraoke.value || !text) return [];
+  const total = Array.from(text).length;
+  return buildKaraokeWords(
+    text,
+    (fill.value / 100) * total,
+    Math.min(16, 320 / total),
+    90,
+  );
+});
+
+const leavingIndex = ref(-1);
+const leavingKey = ref(0);
+let leaveTimer: number | null = null;
+
+const leavingWords = computed<KaraokeWord[]>(() => {
+  const index = leavingIndex.value;
+  if (!wordKaraoke.value || index < 0) return [];
+  const text = lines.value[index]?.text || "";
+  const total = Array.from(text).length;
+  return buildKaraokeWords(text, total, Math.min(16, 220 / total));
+});
+
+watch(
+  () => player.activeLine,
+  (index, previous) => {
+    if (previous === undefined || previous < 0 || index === previous) return;
+    leavingIndex.value = previous;
+    leavingKey.value += 1;
+    if (leaveTimer !== null) window.clearTimeout(leaveTimer);
+    leaveTimer = window.setTimeout(() => {
+      leavingIndex.value = -1;
+      leaveTimer = null;
+    }, 650);
+  },
+);
+
+onBeforeUnmount(() => {
+  if (leaveTimer !== null) window.clearTimeout(leaveTimer);
 });
 
 function karaokeWordActive(i: number): boolean {
@@ -1059,6 +1119,7 @@ watch(
     translateReplace,
   ],
   () => {
+    leavingIndex.value = -1;
     memoKey.value += 1;
   },
 );
@@ -1170,7 +1231,7 @@ const LA_BTN_MAIN_CLASS =
   "grid w-[52px] h-[52px] rounded-[calc(var(--radius)*2.5)] bg-[#fff] text-[color:#111] cursor-pointer place-items-center border-0 backdrop-blur-[8px] transition-[background,transform] duration-[160ms] ease-[ease] enabled:hover:bg-[#fff] enabled:hover:[transform:scale(1.06)] disabled:opacity-[0.35] disabled:cursor-default select-none";
 
 const LINE_BASE =
-  "group/line block w-full m-0 px-0 py-[7px] border-0 [outline:0] [overflow-wrap:anywhere] bg-transparent cursor-pointer text-[length:var(--lyrics-size)] font-[number:var(--lyrics-weight,700)] tracking-[-0.03em] leading-[var(--lyrics-line-height,1.15)] [font-family:var(--lyrics-font,inherit)] [transition:color_0.42s_ease,filter_0.42s_ease,opacity_0.42s_ease,transform_0.52s_cubic-bezier(0.2,0.8,0.2,1)]";
+  "group/line block w-full m-0 px-0 py-[7px] border-0 [outline:0] [overflow-wrap:anywhere] bg-transparent cursor-pointer text-[length:var(--lyrics-size)] font-[number:var(--lyrics-weight,700)] tracking-[-0.03em] leading-[var(--lyrics-line-height,1.15)] [font-family:var(--lyrics-font,inherit)] [transition:color_0.28s_ease,opacity_0.28s_ease,transform_0.36s_cubic-bezier(0.42,0,0.58,1)]";
 
 const NOTE_BASE =
   "inline-flex items-center justify-center w-[0.72em] h-[0.72em] ml-[0.18em] mr-[-0.9em] rounded-full text-current cursor-pointer [vertical-align:0.14em] transition-[opacity,background] duration-[180ms] ease-[ease] hover:bg-[rgba(255,255,255,0.14)]";
@@ -1368,6 +1429,11 @@ watch(
 .karaoke-glyph {
   display: inline-block;
   animation: karaoke-glyph-in 240ms cubic-bezier(0.33, 0, 0.2, 1) both;
+  animation-delay: calc(var(--lead, 0ms) + var(--i, 0) * var(--stagger, 0ms));
+}
+
+.karaoke-glyph.is-leaving {
+  animation: karaoke-glyph-out 220ms cubic-bezier(0.33, 0, 0.2, 1) both;
   animation-delay: calc(var(--i, 0) * var(--stagger, 0ms));
 }
 
@@ -1379,6 +1445,17 @@ watch(
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes karaoke-glyph-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-3.4px);
   }
 }
 
