@@ -873,6 +873,12 @@ const visualStyle = computed(() => ({
   "--lyrics-weight": `${s.value.weight}`,
   "--lyrics-inactive": `${s.value.inactive / 100}`,
   "--lyrics-bg-blur": `${s.value.backgroundBlur}px`,
+  "--karaoke-origin":
+    s.value.align === "center"
+      ? "50% 65%"
+      : s.value.align === "right"
+        ? "100% 65%"
+        : "0% 65%",
   "--lyrics-bg-opacity": `${s.value.backgroundOpacity / 100}`,
   "--lyrics-line-blur": `${s.value.lineBlur}px`,
 }));
@@ -1419,7 +1425,7 @@ watch(
 <style scoped>
 .karaoke-word {
   display: inline-block;
-  transform-origin: 50% 65%;
+  transform-origin: var(--karaoke-origin, 0% 65%);
   transition: transform 90ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
