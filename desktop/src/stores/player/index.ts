@@ -340,7 +340,12 @@ export const usePlayerStore = defineStore("player", {
       audio.ontimeupdate = () => {
         const previous = lastProgress;
         this.progress = audio.currentTime;
-        this.duration = audio.duration || 0;
+        const known = (this.current?.duration_ms ?? 0) / 1000;
+        const media = audio.duration;
+        this.duration =
+          Number.isFinite(media) && media > 1 && media > known * 0.9
+            ? media
+            : known;
         lastProgress = this.progress;
 
         if (this.previewMode) {
