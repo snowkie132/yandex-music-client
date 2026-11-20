@@ -1095,6 +1095,7 @@ watch(
 
 onBeforeUnmount(() => {
   if (leaveTimer !== null) window.clearTimeout(leaveTimer);
+  stopScrollAnimation();
 });
 
 function karaokeWordActive(i: number): boolean {
@@ -1387,6 +1388,7 @@ function onStageWheel(event: WheelEvent) {
   if (!target) return;
   const max = target.scrollHeight - target.clientHeight;
   if (max <= 0) return;
+  stopScrollAnimation();
   event.preventDefault();
   event.stopPropagation();
   let step = event.deltaY;
@@ -1395,22 +1397,61 @@ function onStageWheel(event: WheelEvent) {
   target.scrollTop = Math.min(max, Math.max(0, target.scrollTop + step));
 }
 
+let scrollFrame = 0;
+
+function easeInOut(t: number): number {
+  const curve = (u: number, p1: number, p2: number) =>
+    3 * (1 - u) * (1 - u) * u * p1 + 3 * (1 - u) * u * u * p2 + u * u * u;
+  let low = 0;
+  let high = 1;
+  let middle = 0;
+  for (let i = 0; i < 12; i += 1) {
+    middle = (low + high) * 0.5;
+    if (curve(middle, 0.42, 0.58) < t) low = middle;
+    else high = middle;
+  }
+  return curve((low + high) * 0.5, 0, 1);
+}
+
+function stopScrollAnimation(): void {
+  if (!scrollFrame) return;
+  cancelAnimationFrame(scrollFrame);
+  scrollFrame = 0;
+}
+
+function animateScroll(el: HTMLElement, to: number): void {
+  stopScrollAnimation();
+  const from = el.scrollTop;
+  if (Math.abs(to - from) < 1) {
+    el.scrollTop = to;
+    return;
+  }
+  const started = performance.now();
+  const step = (now: number) => {
+    const t = Math.min(1, (now - started) / 360);
+    el.scrollTop = from + (to - from) * easeInOut(t);
+    scrollFrame = t < 1 ? requestAnimationFrame(step) : 0;
+  };
+  scrollFrame = requestAnimationFrame(step);
+}
+
 function scrollToActive(animate: boolean, attempt = 6) {
   const i = player.activeLine;
   if (!synced.value || i < 0) return;
   const el = lineRefs.value[i];
   const area = scroller.value;
+  const target = area?.getScrollTarget() as HTMLElement | null;
   const height = area?.$el.clientHeight ?? 0;
-  if (!el || !area || height <= 0) {
+  if (!el || !area || !target || height <= 0) {
     if (attempt > 0) requestAnimationFrame(() => scrollToActive(animate, attempt - 1));
     return;
   }
-  const target = Math.max(0, el.offsetTop - height * 0.42);
-  area.setScrollPosition(
-    "vertical",
-    target,
-    animate && s.value.motion ? 360 : 0,
-  );
+  const offset = Math.max(0, el.offsetTop - height * 0.42);
+  if (animate && s.value.motion) animateScroll(target, offset);
+  else {
+    stopScrollAnimation();
+    target.scrollTop = offset;
+  }
 }
 
 watch(
