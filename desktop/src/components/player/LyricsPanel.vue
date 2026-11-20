@@ -992,12 +992,7 @@ interface KaraokeWord {
   chars: KaraokeGlyph[];
 }
 
-function buildKaraokeWords(
-  text: string,
-  typed: number,
-  stagger: number,
-  lead = 0,
-): KaraokeWord[] {
+function buildKaraokeWords(text: string, typed: number): KaraokeWord[] {
   const total = Array.from(text).length;
   if (!total) return [];
   const words: KaraokeWord[] = [];
@@ -1009,9 +1004,6 @@ function buildKaraokeWords(
         Math.round(Math.max(0, Math.min(1, typed - index)) * 32) / 32;
       const alpha = 0.38 + 0.62 * passed;
       const style: Record<string, string> = {
-        "--i": String(index),
-        "--stagger": `${stagger}ms`,
-        "--lead": `${lead}ms`,
         color: `rgba(255,255,255,${alpha.toFixed(3)})`,
       };
       if (passed > 0.04) {
@@ -1043,12 +1035,7 @@ const karaokeWords = computed<KaraokeWord[]>(() => {
   const text = lines.value[player.activeLine]?.text || "";
   if (!wordKaraoke.value || !text) return [];
   const total = Array.from(text).length;
-  return buildKaraokeWords(
-    text,
-    (fill.value / 100) * total,
-    Math.min(16, 320 / total),
-    90,
-  );
+  return buildKaraokeWords(text, (fill.value / 100) * total);
 });
 
 onBeforeUnmount(stopScrollAnimation);
@@ -1442,19 +1429,6 @@ watch(
 
 .karaoke-glyph {
   display: inline-block;
-  animation: karaoke-glyph-in 240ms cubic-bezier(0.33, 0, 0.2, 1) both;
-  animation-delay: calc(var(--lead, 0ms) + var(--i, 0) * var(--stagger, 0ms));
-}
-
-@keyframes karaoke-glyph-in {
-  from {
-    opacity: 0;
-    transform: translateY(3.4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .lyrics-fs-anim {
