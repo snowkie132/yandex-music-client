@@ -259,6 +259,32 @@
         }}</span>
       </div>
 
+      <div class="h-[1px] bg-[var(--line)]" style="margin: 6px 4px" />
+
+      <div
+        v-for="item in variants"
+        :key="item.id"
+        class="flex items-center gap-[8px] h-[26px] px-[7px] py-0 rounded-[calc(var(--radius)*0.5833)] text-[calc(12px*var(--text-scale,1))] leading-none cursor-pointer whitespace-nowrap select-none transition-[background,color] duration-[100ms] ease-[ease] hover:bg-[var(--hover)] [&_svg]:w-[15px] [&_svg]:h-[15px] [&_svg]:flex-none"
+        :class="
+          currentVariant === item.id
+            ? 'text-[color:var(--fg)]'
+            : 'text-[color:var(--fg-dim)] hover:text-[color:var(--fg)]'
+        "
+        v-close-popup
+        @click="chooseVariant(item.id)"
+      >
+        <Icon :name="item.icon" :size="18" class="text-[color:var(--fg-faint)]" />
+        <span class="min-w-0 overflow-hidden text-ellipsis">{{ item.label }}</span>
+        <Icon
+          v-if="currentVariant === item.id"
+          name="mingcute:check-line"
+          :size="14"
+          class="ml-auto text-[color:var(--accent)]"
+        />
+      </div>
+
+      <div class="h-[1px] bg-[var(--line)]" style="margin: 6px 4px" />
+
       <div
         class="flex items-center gap-[8px] h-[26px] px-[7px] py-0 rounded-[calc(var(--radius)*0.5833)] text-[calc(12px*var(--text-scale,1))] leading-none text-[color:var(--fg-dim)] cursor-pointer whitespace-nowrap select-none transition-[background,color] duration-[100ms] ease-[ease] hover:bg-[var(--hover)] hover:text-[color:var(--fg)] [&_svg]:w-[15px] [&_svg]:h-[15px] [&_svg]:text-[color:var(--fg-faint)] [&_svg]:flex-none [&_svg]:[transition:color_0.1s_ease] [&:hover_svg]:text-[color:var(--fg)] [&_span]:min-w-0 [&_span]:overflow-hidden [&_span]:text-ellipsis"
         v-close-popup
@@ -406,6 +432,7 @@ import { usePlayerStore } from "@/stores/player/index";
 import { clearOverride, getOverride, setOverride } from "@/lib/censorOverrides";
 import { openTrailerDialog } from "@/lib/dialogs";
 import { ensureCensorList, isCensored, prefersOriginal } from "@/lib/censor";
+import { variantFor, type TrackVariant } from "@/lib/trackVariants";
 import { useUiStore } from "@/stores/ui/index";
 
 const props = withDefaults(
@@ -519,6 +546,31 @@ const replaceOpen = ref(false);
 const replaceSource = ref("");
 const replaceLabel = ref("");
 const replaceSaved = ref(0);
+const variantTick = ref(0);
+
+const variants: Array<{ id: TrackVariant; label: string; icon: string }> = [
+  { id: "normal", label: "Обычная версия", icon: "mingcute:music-line" },
+  { id: "speedup", label: "Sped up — быстрее", icon: "mingcute:fast-forward-fill" },
+  { id: "slowed", label: "Slowed — медленнее", icon: "mingcute:time-line" },
+];
+
+const currentVariant = computed<TrackVariant>(() => {
+  void variantTick.value;
+  return variantFor(props.track.id);
+});
+
+function chooseVariant(variant: TrackVariant): void {
+  player.setTrackVariant(props.track.id, variant);
+  variantTick.value += 1;
+  Notify.create({
+    message:
+      variant === "speedup"
+        ? "Включена ускоренная версия"
+        : variant === "slowed"
+          ? "Включена замедленная версия"
+          : "Обычная скорость",
+  });
+}
 
 const ui = useUiStore();
 const censorTick = ref(0);

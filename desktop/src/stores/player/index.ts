@@ -35,6 +35,11 @@ import type { LyricsOrigin } from "@/lib/lyricsSource";
 import { hasText, isPaywallLyrics, loadTrackLyrics } from "@/lib/lyricsSource";
 import { proxyStream } from "@/lib/stream";
 import {
+  setTrackVariant as setStoredVariant,
+  variantFor,
+  variantRate,
+} from "@/lib/trackVariants";
+import {
   censorUrl,
   censorUrlFor,
   ensureCensorList,
@@ -331,7 +336,7 @@ export const usePlayerStore = defineStore("player", {
     bind() {
       if (useUiStore().settings.censorBypass) void ensureCensorList();
       setOutputVolume(this.muted ? 0 : this.volume);
-      audio.playbackRate = this.playbackRate;
+      this.applyRate();
       const startSettings = useUiStore().settings;
       if (startSettings.trimSilence || startSettings.gaplessEnabled) {
         ensureAnalyser();
@@ -1217,7 +1222,7 @@ export const usePlayerStore = defineStore("player", {
         const target = this.muted ? 0 : this.volume;
         cancelFade(fadeMs > 0 && autoplay ? 0 : target);
         audio.src = source;
-        audio.playbackRate = this.playbackRate;
+        this.applyRate();
         useEqualizerStore().apply();
         if (startAt > 0) {
           const seekOnce = () => {
@@ -1633,9 +1638,28 @@ export const usePlayerStore = defineStore("player", {
       }
     },
 
+    applyRate() {
+      const variant = variantFor(this.current?.id);
+      const element = audio as HTMLAudioElement & {
+        preservesPitch?: boolean;
+        webkitPreservesPitch?: boolean;
+      };
+      try {
+        if ("preservesPitch" in element) element.preservesPitch = variant === "normal";
+        element.webkitPreservesPitch = variant === "normal";
+      } catch {}
+      audio.playbackRate = this.playbackRate * variantRate(variant);
+    },
+
+    setTrackVariant(id: string, variant: "normal" | "speedup" | "slowed") {
+      setStoredVariant(id, variant);
+      if (this.current?.id === id) this.applyRate();
+      this.persistSession();
+    },
+
     setPlaybackRate(rate: number) {
       this.playbackRate = rate;
-      audio.playbackRate = rate;
+      this.applyRate();
       this.persist();
       updatePositionState(this.duration, this.progress, rate);
       void this.syncPresence(true);
