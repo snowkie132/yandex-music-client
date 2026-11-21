@@ -65,9 +65,15 @@ export interface Stream {
   source: string;
 }
 
+export interface LyricsWord {
+  time_ms: number;
+  text: string;
+}
+
 export interface LyricsLine {
   time_ms: number;
   text: string;
+  words?: LyricsWord[];
 }
 
 export interface Lyrics {

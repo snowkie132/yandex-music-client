@@ -13,6 +13,7 @@ pub fn parse_lrc(raw: &str) -> Vec<LyricsLineDto> {
                     out.push(LyricsLineDto {
                         time_ms: ms,
                         text: text.trim().to_string(),
+                        words: Vec::new(),
                     });
                     continue;
                 }
@@ -25,6 +26,7 @@ pub fn parse_lrc(raw: &str) -> Vec<LyricsLineDto> {
                 out.push(LyricsLineDto {
                     time_ms: 0,
                     text: text.trim().to_string(),
+                    words: Vec::new(),
                 });
                 continue;
             }
@@ -32,6 +34,7 @@ pub fn parse_lrc(raw: &str) -> Vec<LyricsLineDto> {
         out.push(LyricsLineDto {
             time_ms: 0,
             text: trimmed.to_string(),
+            words: Vec::new(),
         });
     }
     if out.iter().any(|line| line.time_ms > 0) {

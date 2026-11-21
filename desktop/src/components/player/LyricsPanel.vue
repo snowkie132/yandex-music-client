@@ -596,7 +596,7 @@ import { useRoute, useRouter } from "vue-router";
 import LyricsSettingsPanel from "@/components/player/LyricsSettingsPanel.vue";
 import TrackMenu from "@/components/common/TrackMenu.vue";
 import { api } from "@/api/client";
-import type { GeniusQuote, LyricsLine } from "@/api/types";
+import type { GeniusQuote, LyricsLine, LyricsWord } from "@/api/types";
 import { audio } from "@/lib/audio";
 import { useVisualizer } from "@/composables/useVisualizer";
 import { artistNames } from "@/lib/format";
@@ -1007,40 +1007,101 @@ interface KaraokeWord {
   chars: KaraokeGlyph[];
 }
 
-function buildKaraokeWords(text: string, typed: number): KaraokeWord[] {
-  const total = Array.from(text).length;
-  if (!total) return [];
+function alignWordTimes(
+  tokens: string[],
+  words: LyricsWord[],
+): Array<{ start: number; end: number }> {
+  const out: Array<{ start: number; end: number }> = [];
+  let index = 0;
+  for (const token of tokens) {
+    const target = token.trim();
+    const first = words[index];
+    let acc = "";
+    while (index < words.length && acc.trim() !== target) {
+      acc += words[index].text;
+      index += 1;
+      if (acc.trim().length >= target.length) break;
+    }
+    const last = words[Math.max(index - 1, 0)];
+    out.push({
+      start: first?.time_ms ?? 0,
+      end: last?.time_ms ?? 0,
+    });
+  }
+  for (let i = 0; i < out.length; i += 1) {
+    const next = out[i + 1]?.start ?? 0;
+    if (next > out[i].start) out[i].end = next;
+    else if (out[i].end <= out[i].start) out[i].end = out[i].start + 400;
+  }
+  return out;
+}
+
+function glyphStyle(passed: number): Record<string, string> {
+  const alpha = 0.38 + 0.62 * passed;
+  const style: Record<string, string> = {
+    color: `rgba(255,255,255,${alpha.toFixed(3)})`,
+  };
+  if (passed > 0.04) {
+    const core = (0.55 * passed).toFixed(2);
+    const halo = (0.25 * passed).toFixed(2);
+    style.textShadow =
+      `0 0 ${(2 + 3 * passed).toFixed(1)}px rgba(255,255,255,${core}), ` +
+      `0 0 ${(9 + 7 * passed).toFixed(1)}px rgba(255,255,255,${halo})`;
+  }
+  return style;
+}
+
+function buildKaraokeWords(
+  text: string,
+  typed: number,
+  wordTimes: LyricsWord[] | undefined,
+  nowMs: number,
+): KaraokeWord[] {
+  const tokens = text.match(/\S+\s*/gu) ?? [];
+  if (!tokens.length) return [];
+  const timings =
+    wordTimes && wordTimes.length >= tokens.length
+      ? alignWordTimes(tokens, wordTimes)
+      : null;
   const words: KaraokeWord[] = [];
   let index = 0;
-  for (const raw of text.match(/\S+\s*/gu) ?? []) {
+  tokens.forEach((raw, tokenIndex) => {
+    const timing = timings?.[tokenIndex];
+    const length = Array.from(raw).length;
     const chars: KaraokeGlyph[] = [];
+    let offset = 0;
     for (const ch of raw) {
-      const passed =
-        Math.round(Math.max(0, Math.min(1, typed - index)) * 32) / 32;
-      const alpha = 0.38 + 0.62 * passed;
-      const style: Record<string, string> = {
-        color: `rgba(255,255,255,${alpha.toFixed(3)})`,
-      };
-      if (passed > 0.04) {
-        const core = (0.55 * passed).toFixed(2);
-        const halo = (0.25 * passed).toFixed(2);
-        style.textShadow =
-          `0 0 ${(2 + 3 * passed).toFixed(1)}px rgba(255,255,255,${core}), ` +
-          `0 0 ${(9 + 7 * passed).toFixed(1)}px rgba(255,255,255,${halo})`;
+      let passed: number;
+      if (timing) {
+        const span = Math.max(120, timing.end - timing.start);
+        const progress = Math.max(0, Math.min(1, (nowMs - timing.start) / span));
+        passed = Math.max(0, Math.min(1, progress * length - offset));
+      } else {
+        passed = Math.max(0, Math.min(1, typed - index));
       }
-      chars.push({ ch, style });
+      passed = Math.round(passed * 32) / 32;
+      chars.push({ ch, style: glyphStyle(passed) });
+      offset += 1;
       index += 1;
     }
     words.push({ chars });
-  }
+  });
   return words;
 }
 
+const playhead = ref(0);
+
 const karaokeWords = computed<KaraokeWord[]>(() => {
-  const text = lines.value[player.activeLine]?.text || "";
+  const line = lines.value[player.activeLine];
+  const text = line?.text || "";
   if (!wordKaraoke.value || !text) return [];
   const total = Array.from(text).length;
-  return buildKaraokeWords(text, (fill.value / 100) * total);
+  return buildKaraokeWords(
+    text,
+    (fill.value / 100) * total,
+    line?.words,
+    playhead.value,
+  );
 });
 
 onBeforeUnmount(stopScrollAnimation);
@@ -1092,6 +1153,10 @@ function splitWords(text: string): string[] {
 // Длительность строки как в AngelOS: не больше 85% промежутка до следующей
 // строки и не больше 0.3 с на слог — остаток длинного промежутка это пауза.
 function lineSpan(line: LyricsLine, gapMs: number): number {
+  const last = line.words?.[line.words.length - 1];
+  if (last) {
+    return Math.min(gapMs, Math.max(600, last.time_ms - line.time_ms + 400));
+  }
   const words = splitWords(line.text || "");
   const syllables = words.map((word) => Math.max(1, (word.match(VOWELS) || []).length));
   const total = syllables.reduce((sum, value) => sum + value, 0) || 1;
@@ -1115,6 +1180,7 @@ function tick(stamp = 0) {
     ? Math.min(120, Math.max(0, stamp - lastStamp))
     : 0;
   const now = lastAudioMs + drift;
+  playhead.value = now;
   if (line) {
     const start = line.time_ms;
     const end = list[index + 1]?.time_ms ?? start + 4200;

@@ -65,9 +65,17 @@ pub struct PlaylistDto {
 }
 
 #[derive(Serialize, Clone)]
+pub struct LyricsWordDto {
+    pub time_ms: i64,
+    pub text: String,
+}
+
+#[derive(Serialize, Clone)]
 pub struct LyricsLineDto {
     pub time_ms: i64,
     pub text: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub words: Vec<LyricsWordDto>,
 }
 
 #[derive(Serialize, Clone)]

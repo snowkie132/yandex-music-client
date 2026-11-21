@@ -78,6 +78,7 @@ fn ttml_lines(ttml: &str) -> Vec<LyricsLineDto> {
         lines.push(LyricsLineDto {
             time_ms: (begin * 1000.0).round() as i64,
             text,
+            words: Vec::new(),
         });
     }
     lines.sort_by_key(|line| line.time_ms);
@@ -188,8 +189,8 @@ pub async fn better_lyrics(
 }
 
 const MXM_SITE: &str = "https://www.musixmatch.com";
-const MXM_APP: &str = "community-app-v1.0";
-const MXM_KEY: &str = "13d526195ebbdcddc40c861c4df22ba5";
+const MXM_APP: &str = "mobile-app-v1.0";
+const MXM_KEY: &str = "ed75e0237e1c746840647c555738a1e9";
 
 fn utc_day() -> String {
     let secs = std::time::SystemTime::now()
@@ -241,7 +242,21 @@ async fn mxm_api(
     );
     let response = http
         .get(signed)
-        .header("accept", "application/json")
+        .header(
+            "user-agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+        )
+        .header("accept", "*/*")
+        .header("accept-language", "en-US,en;q=0.9")
+        .header("referer", "https://www.musixmatch.com/")
+        .header("origin", "https://www.musixmatch.com")
+        .header("sec-ch-ua", "\"Chromium\";v=\"152\", \"Not?A_Brand\";v=\"24\"")
+        .header("sec-ch-ua-mobile", "?0")
+        .header("sec-ch-ua-platform", "\"Windows\"")
+        .header("sec-fetch-dest", "empty")
+        .header("sec-fetch-mode", "cors")
+        .header("sec-fetch-site", "same-origin")
+        .header("cookie", "mxm_bab=AB")
         .send()
         .await
         .ok()?;
@@ -256,13 +271,65 @@ async fn mxm_api(
     message.get("body").cloned()
 }
 
+fn richsync_lines(body: &str) -> Vec<LyricsLineDto> {
+    use crate::yandex::LyricsWordDto;
+
+    let Ok(data) = serde_json::from_str::<serde_json::Value>(body) else {
+        return Vec::new();
+    };
+    let Some(entries) = data.as_array() else {
+        return Vec::new();
+    };
+    let mut out: Vec<LyricsLineDto> = Vec::new();
+    for entry in entries {
+        let ts = entry.get("ts").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let chunks = entry
+            .get("l")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let mut words: Vec<LyricsWordDto> = Vec::new();
+        let mut joined = String::new();
+        for chunk in &chunks {
+            let text = chunk.get("c").and_then(|v| v.as_str()).unwrap_or("");
+            joined.push_str(text);
+            let offset = chunk.get("o").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            if text.trim().is_empty() {
+                continue;
+            }
+            words.push(LyricsWordDto {
+                time_ms: ((ts + offset) * 1000.0).round() as i64,
+                text: text.trim().to_string(),
+            });
+        }
+        let text = entry
+            .get("x")
+            .and_then(|v| v.as_str())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| joined.split_whitespace().collect::<Vec<_>>().join(" "));
+        if text.trim().is_empty() {
+            continue;
+        }
+        out.push(LyricsLineDto {
+            time_ms: (ts * 1000.0).round() as i64,
+            text,
+            words,
+        });
+    }
+    out
+}
+
 fn clean_plain(body: &str) -> Vec<LyricsLineDto> {
     body.lines()
         .map(|line| line.trim_end().to_string())
         .filter(|line| !line.trim_start().starts_with("****"))
         .filter(|line| !line.trim().is_empty())
         .filter(|line| !line.trim().chars().all(|ch| ch.is_ascii_digit() || ch == '.'))
-        .map(|text| LyricsLineDto { time_ms: 0, text })
+        .map(|text| LyricsLineDto {
+            time_ms: 0,
+            text,
+            words: Vec::new(),
+        })
         .collect()
 }
 
@@ -363,12 +430,53 @@ pub async fn musixmatch(
     let Some(track_id) = pick_track(list, &title, &artist, duration.unwrap_or(0)) else {
         return Ok(None);
     };
-    let lyrics = mxm_api(
+    let track = track_id.to_string();
+    if let Some(rich) = mxm_api(&http, "track.richsync.get", &[("track_id", track.clone())]).await {
+        if let Some(body) = rich
+            .get("richsync")
+            .and_then(|value| value.get("richsync_body"))
+            .and_then(|value| value.as_str())
+        {
+            let lines = richsync_lines(body);
+            if lines.len() >= 2 {
+                return Ok(Some(LyricsDto {
+                    track_id: id,
+                    synced: true,
+                    lines,
+                    writers: Vec::new(),
+                }));
+            }
+        }
+    }
+
+    if let Some(sub) = mxm_api(
         &http,
-        "track.lyrics.get",
-        &[("track_id", track_id.to_string())],
+        "track.subtitle.get",
+        &[
+            ("track_id", track.clone()),
+            ("subtitle_format", "lrc".to_string()),
+        ],
     )
-    .await;
+    .await
+    {
+        if let Some(body) = sub
+            .get("subtitle")
+            .and_then(|value| value.get("subtitle_body"))
+            .and_then(|value| value.as_str())
+        {
+            let lines = crate::yandex::parse_lrc(body);
+            if lines.len() >= 2 {
+                return Ok(Some(LyricsDto {
+                    track_id: id,
+                    synced: true,
+                    lines,
+                    writers: Vec::new(),
+                }));
+            }
+        }
+    }
+
+    let lyrics = mxm_api(&http, "track.lyrics.get", &[("track_id", track)]).await;
     let Some(lyrics) = lyrics else {
         return Ok(None);
     };
