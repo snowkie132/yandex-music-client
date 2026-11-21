@@ -2,12 +2,6 @@ export type TrackVariant = "normal" | "speedup" | "slowed";
 
 const STORAGE_KEY = "mashiro.trackVariants";
 
-const RATES: Record<TrackVariant, number> = {
-  normal: 1,
-  speedup: 1.25,
-  slowed: 0.8,
-};
-
 export const VARIANT_LABEL: Record<TrackVariant, string> = {
   normal: "Обычная",
   speedup: "Sped up",
@@ -59,6 +53,12 @@ export function setTrackVariant(
   persist();
 }
 
-export function variantRate(variant: TrackVariant): number {
-  return RATES[variant] ?? 1;
+export function variantRate(
+  variant: TrackVariant,
+  speedup: number,
+  slowed: number,
+): number {
+  if (variant === "speedup") return speedup;
+  if (variant === "slowed") return slowed;
+  return 1;
 }

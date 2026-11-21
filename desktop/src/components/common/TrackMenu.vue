@@ -548,11 +548,21 @@ const replaceLabel = ref("");
 const replaceSaved = ref(0);
 const variantTick = ref(0);
 
-const variants: Array<{ id: TrackVariant; label: string; icon: string }> = [
-  { id: "normal", label: "Обычная версия", icon: "mingcute:music-line" },
-  { id: "speedup", label: "Sped up — быстрее", icon: "mingcute:fast-forward-fill" },
-  { id: "slowed", label: "Slowed — медленнее", icon: "mingcute:time-line" },
-];
+const variants = computed<Array<{ id: TrackVariant; label: string; icon: string }>>(
+  () => [
+    { id: "normal", label: "Обычная версия", icon: "mingcute:music-line" },
+    {
+      id: "speedup",
+      label: `Sped up — ×${ui.settings.speedupRate.toFixed(2)}`,
+      icon: "mingcute:fast-forward-fill",
+    },
+    {
+      id: "slowed",
+      label: `Slowed — ×${ui.settings.slowedRate.toFixed(2)}`,
+      icon: "mingcute:time-line",
+    },
+  ],
+);
 
 const currentVariant = computed<TrackVariant>(() => {
   void variantTick.value;

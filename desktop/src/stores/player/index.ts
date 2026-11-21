@@ -479,6 +479,11 @@ export const usePlayerStore = defineStore("player", {
       if (!normBound) {
         normBound = true;
         watch(
+          () => [useUiStore().settings.speedupRate, useUiStore().settings.slowedRate],
+          () => this.applyRate(),
+        );
+
+        watch(
           () => useUiStore().settings.normalizeVolume,
           (on) => setNormalization(on),
         );
@@ -1648,7 +1653,10 @@ export const usePlayerStore = defineStore("player", {
         if ("preservesPitch" in element) element.preservesPitch = variant === "normal";
         element.webkitPreservesPitch = variant === "normal";
       } catch {}
-      audio.playbackRate = this.playbackRate * variantRate(variant);
+      const settings = useUiStore().settings;
+      audio.playbackRate =
+        this.playbackRate *
+        variantRate(variant, settings.speedupRate, settings.slowedRate);
     },
 
     setTrackVariant(id: string, variant: "normal" | "speedup" | "slowed") {
