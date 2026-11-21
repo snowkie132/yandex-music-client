@@ -99,15 +99,55 @@ pub async fn get_site(path: &str) -> Result<Value, String> {
     Ok(unwrap_response(body))
 }
 
+fn curl_page(url: &str) -> Option<String> {
+    let output = std::process::Command::new("curl")
+        .args([
+            "-sSL",
+            "--compressed",
+            "--max-time",
+            "20",
+            "-A",
+            UA,
+            "-H",
+            "Accept: text/html,application/xhtml+xml",
+            url,
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout).to_string();
+    if text.contains("data-lyrics-container") {
+        Some(text)
+    } else {
+        None
+    }
+}
+
 pub async fn page(url: &str) -> Result<String, String> {
     if url.is_empty() {
         return Err("у страницы нет адреса".to_string());
     }
 
+    // страницу отдаём через curl: Cloudflare режет запросы reqwest по отпечатку
+    let target = url.to_string();
+    if let Ok(Some(found)) = tokio::task::spawn_blocking(move || curl_page(&target)).await {
+        return Ok(found);
+    }
+
     let resp = http()?
         .get(url)
-        .header("Accept", "text/html,application/xhtml+xml")
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
         .header("Accept-Language", "en-US,en;q=0.9,ru;q=0.8")
+        .header("Sec-Ch-Ua", "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\"")
+        .header("Sec-Ch-Ua-Mobile", "?0")
+        .header("Sec-Ch-Ua-Platform", "\"Windows\"")
+        .header("Sec-Fetch-Dest", "document")
+        .header("Sec-Fetch-Mode", "navigate")
+        .header("Sec-Fetch-Site", "none")
+        .header("Sec-Fetch-User", "?1")
+        .header("Upgrade-Insecure-Requests", "1")
         .send()
         .await
         .map_err(|e| format!("страница Genius не открылась: {e}"))?;
