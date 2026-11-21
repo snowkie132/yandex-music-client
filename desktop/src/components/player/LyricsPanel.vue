@@ -383,7 +383,6 @@
                       v-for="(w, wi) in karaokeWords"
                       :key="`g${player.activeLine}-${wi}`"
                       class="karaoke-word whitespace-pre-wrap"
-                      :class="w.active ? 'is-active' : ''"
                       ><span
                         v-for="(c, ci) in w.chars"
                         :key="`g${player.activeLine}-${wi}-${ci}`"
@@ -873,12 +872,6 @@ const visualStyle = computed(() => ({
   "--lyrics-weight": `${s.value.weight}`,
   "--lyrics-inactive": `${s.value.inactive / 100}`,
   "--lyrics-bg-blur": `${s.value.backgroundBlur}px`,
-  "--karaoke-origin":
-    s.value.align === "center"
-      ? "50% 65%"
-      : s.value.align === "right"
-        ? "100% 65%"
-        : "0% 65%",
   "--lyrics-bg-opacity": `${s.value.backgroundOpacity / 100}`,
   "--lyrics-line-blur": `${s.value.lineBlur}px`,
 }));
@@ -994,7 +987,6 @@ interface KaraokeGlyph {
 }
 
 interface KaraokeWord {
-  active: boolean;
   chars: KaraokeGlyph[];
 }
 
@@ -1022,17 +1014,7 @@ function buildKaraokeWords(text: string, typed: number): KaraokeWord[] {
       chars.push({ ch, style });
       index += 1;
     }
-    words.push({ active: false, chars });
-  }
-  const position = Math.min(total - 1, Math.max(0, Math.floor(typed)));
-  let offset = 0;
-  for (const word of words) {
-    const length = word.chars.length;
-    if (position < offset + length) {
-      word.active = true;
-      break;
-    }
-    offset += length;
+    words.push({ chars });
   }
   return words;
 }
@@ -1425,12 +1407,6 @@ watch(
 <style scoped>
 .karaoke-word {
   display: inline-block;
-  transform-origin: var(--karaoke-origin, 0% 65%);
-  transition: transform 90ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.karaoke-word.is-active {
-  transform: scale(1.13);
 }
 
 .karaoke-glyph {
