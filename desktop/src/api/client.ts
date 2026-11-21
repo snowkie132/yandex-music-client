@@ -256,11 +256,23 @@ export const api = {
     id: string,
     title: string,
     artist: string,
+    album: string | null,
     duration: number | null,
-  ) => call<Lyrics | null>("better_lyrics", { id, title, artist, duration }),
+  ) =>
+    call<Lyrics | null>("better_lyrics", {
+      id,
+      title,
+      artist,
+      album,
+      duration,
+    }),
 
-  musixmatch: (id: string, title: string, artist: string) =>
-    call<Lyrics | null>("musixmatch", { id, title, artist }),
+  musixmatch: (
+    id: string,
+    title: string,
+    artist: string,
+    duration: number | null,
+  ) => call<Lyrics | null>("musixmatch", { id, title, artist, duration }),
 
   translateLines: (target: string, lines: string[]) =>
     call<string[]>("translate_lines", { target, lines }),

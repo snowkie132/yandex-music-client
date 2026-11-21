@@ -57,10 +57,18 @@ fn ttml_lines(ttml: &str) -> Vec<LyricsLineDto> {
             continue;
         };
         let head = &chunk[start..start + gt];
-        let Some(begin) = attr(head, "begin").and_then(|v| v.parse::<f64>().ok()) else {
+        let inner = &chunk[start + gt + 1..];
+        let begin = attr(head, "begin")
+            .and_then(parse_begin)
+            .or_else(|| {
+                let span = &inner[inner.find("<span")?..];
+                let span_head = &span[..span.find('>')?];
+                attr(span_head, "begin").and_then(parse_begin)
+            });
+        let Some(begin) = begin else {
             continue;
         };
-        let text = decode_entities(&strip_tags(&chunk[start + gt + 1..]))
+        let text = decode_entities(&strip_tags(inner))
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
@@ -89,36 +97,94 @@ fn dto(track_id: &str, lines: Vec<LyricsLineDto>) -> Option<LyricsDto> {
     })
 }
 
+fn parse_begin(value: &str) -> Option<f64> {
+    if let Ok(seconds) = value.parse::<f64>() {
+        return Some(seconds);
+    }
+    let parts: Vec<&str> = value.split(':').collect();
+    let mut seconds = 0.0f64;
+    for part in parts {
+        seconds = seconds * 60.0 + part.parse::<f64>().ok()?;
+    }
+    Some(seconds)
+}
+
+async fn better_request(
+    http: &reqwest::Client,
+    endpoint: &str,
+    title: &str,
+    artist: &str,
+    album: Option<&str>,
+    duration: Option<u32>,
+) -> Option<Vec<LyricsLineDto>> {
+    let mut url = url::Url::parse(&format!("https://lyrics-api.boidu.dev/{endpoint}")).ok()?;
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("s", title);
+        query.append_pair("a", artist);
+        if let Some(album) = album.filter(|value| !value.is_empty()) {
+            query.append_pair("al", album);
+        }
+        if let Some(duration) = duration {
+            query.append_pair("d", &duration.to_string());
+        }
+    }
+    let response = http
+        .get(url)
+        .header("accept", "application/json")
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = response.json().await.ok()?;
+    let ttml = body.get("ttml").and_then(|value| value.as_str())?;
+    let lines = ttml_lines(ttml);
+    if lines.len() < 2 {
+        None
+    } else {
+        Some(lines)
+    }
+}
+
 #[tauri::command]
 pub async fn better_lyrics(
     id: String,
     title: String,
     artist: String,
+    album: Option<String>,
     duration: Option<u32>,
 ) -> Result<Option<LyricsDto>, String> {
-    let Some(duration) = duration.filter(|value| *value > 0) else {
-        return Ok(None);
-    };
-    let response = client()
-        .get(BETTER_URL)
-        .query(&[
-            ("s", title.as_str()),
-            ("a", artist.as_str()),
-            ("d", &duration.to_string()),
-        ])
-        .header("Accept", "application/json")
-        .send()
+    let http = client();
+    let duration = duration.filter(|value| *value > 0);
+    let mut best: Vec<LyricsLineDto> = Vec::new();
+    let attempts = [
+        ("getLyrics", duration),
+        ("getLyrics", None),
+        ("ttml/getLyrics", duration),
+        ("ttml/getLyrics", None),
+    ];
+    for (endpoint, seconds) in attempts {
+        if let Some(lines) = better_request(
+            &http,
+            endpoint,
+            &title,
+            &artist,
+            album.as_deref(),
+            seconds,
+        )
         .await
-        .map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Ok(None);
+        {
+            if lines.len() > best.len() {
+                best = lines;
+            }
+            if best.len() >= 8 {
+                break;
+            }
+        }
     }
-    let body: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-    let ttml = body.get("ttml").and_then(|v| v.as_str()).unwrap_or("");
-    if ttml.is_empty() {
-        return Ok(None);
-    }
-    Ok(dto(&id, ttml_lines(ttml)))
+    Ok(dto(&id, best))
 }
 
 const MXM_SITE: &str = "https://www.musixmatch.com";
@@ -200,30 +266,101 @@ fn clean_plain(body: &str) -> Vec<LyricsLineDto> {
         .collect()
 }
 
+fn norm(value: &str) -> String {
+    value
+        .to_lowercase()
+        .chars()
+        .map(|ch| if ch.is_alphanumeric() { ch } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn pick_track(list: &[serde_json::Value], title: &str, artist: &str, duration: u32) -> Option<i64> {
+    let wanted_title = norm(title);
+    let wanted_artist = norm(artist);
+    let mut best: Option<(i64, i32)> = None;
+    for item in list {
+        let Some(track) = item.get("track") else {
+            continue;
+        };
+        let track_title = norm(track.get("track_name").and_then(|v| v.as_str()).unwrap_or(""));
+        let track_artist = norm(track.get("artist_name").and_then(|v| v.as_str()).unwrap_or(""));
+        if track_title.is_empty() || track_artist.is_empty() {
+            continue;
+        }
+        let title_score = if track_title == wanted_title {
+            100
+        } else if track_title.contains(&wanted_title) || wanted_title.contains(&track_title) {
+            60
+        } else {
+            0
+        };
+        let artist_score = if track_artist == wanted_artist {
+            60
+        } else if track_artist.contains(&wanted_artist) || wanted_artist.contains(&track_artist) {
+            30
+        } else {
+            0
+        };
+        if title_score == 0 || artist_score == 0 {
+            continue;
+        }
+        let length = track.get("track_length").and_then(|v| v.as_i64()).unwrap_or(0);
+        let duration_score = if length > 0 && duration > 0 {
+            let delta = (length - duration as i64).abs();
+            if delta <= 3 {
+                25
+            } else if delta <= 10 {
+                12
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+        let score = title_score + artist_score + duration_score;
+        let id = track.get("track_id").and_then(|v| v.as_i64());
+        if let Some(id) = id {
+            if best.map(|(_, value)| score > value).unwrap_or(true) {
+                best = Some((id, score));
+            }
+        }
+    }
+    match best {
+        Some((id, score)) if score >= 90 => Some(id),
+        _ => None,
+    }
+}
+
 #[tauri::command]
-pub async fn musixmatch(id: String, title: String, artist: String) -> Result<Option<LyricsDto>, String> {
+pub async fn musixmatch(
+    id: String,
+    title: String,
+    artist: String,
+    duration: Option<u32>,
+) -> Result<Option<LyricsDto>, String> {
     let http = client();
     let search = mxm_api(
         &http,
         "track.search",
         &[
-            ("q_track", title),
-            ("q_artist", artist),
-            ("page_size", "5".to_string()),
+            ("q_track", title.clone()),
+            ("q_artist", artist.clone()),
+            ("page_size", "10".to_string()),
         ],
     )
     .await;
     let Some(search) = search else {
         return Ok(None);
     };
-    let track_id = search
+    let list = search
         .get("track_list")
-        .and_then(|list| list.as_array())
-        .and_then(|list| list.first())
-        .and_then(|item| item.get("track"))
-        .and_then(|track| track.get("track_id"))
-        .and_then(|v| v.as_i64());
-    let Some(track_id) = track_id else {
+        .and_then(|value| value.as_array())
+        .map(|value| value.as_slice())
+        .unwrap_or(&[]);
+    let Some(track_id) = pick_track(list, &title, &artist, duration.unwrap_or(0)) else {
         return Ok(None);
     };
     let lyrics = mxm_api(

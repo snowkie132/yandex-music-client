@@ -86,6 +86,7 @@ async function fromBetterLyrics(track: Track): Promise<Lyrics | null> {
       track.id.split(":")[0],
       track.title,
       mainArtist(track),
+      track.album_title ?? null,
       durationSeconds(track),
     )
     .catch(() => null);
@@ -95,7 +96,12 @@ async function fromBetterLyrics(track: Track): Promise<Lyrics | null> {
 
 async function fromMusixmatch(track: Track): Promise<Lyrics | null> {
   const found = await api
-    .musixmatch(track.id.split(":")[0], track.title, mainArtist(track))
+    .musixmatch(
+      track.id.split(":")[0],
+      track.title,
+      mainArtist(track),
+      durationSeconds(track),
+    )
     .catch(() => null);
   if (!found || !hasText(found)) return null;
   return { ...found, track_id: track.id };
