@@ -1058,11 +1058,27 @@ let raf = 0;
 let lastAudioMs = -1;
 let lastStamp = 0;
 
-// Оценка длительности строки: раскладываем подсветку на время пения, а не
-// на весь промежуток до следующей строки вместе с паузой.
+const VOWELS = /[аеёиоуыэюяaeiouyäöüéèàáíóú]/gi;
+
+function splitWords(text: string): string[] {
+  return text.split(" ").reduce<string[]>((words, word) => {
+    // дефис или одиночный знак — не отдельное слово, липнет к предыдущему
+    if (words.length && !/[0-9A-Za-z\u00c0-\u024f\u0400-\u04ff\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/.test(word)) {
+      words[words.length - 1] += ` ${word}`;
+    } else {
+      words.push(word);
+    }
+    return words;
+  }, []);
+}
+
+// Длительность строки как в AngelOS: не больше 85% промежутка до следующей
+// строки и не больше 0.3 с на слог — остаток длинного промежутка это пауза.
 function lineSpan(line: LyricsLine, gapMs: number): number {
-  const chars = (line.text || "").replace(/\s+/g, "").length;
-  return Math.min(gapMs, Math.max(1100, chars * 190));
+  const words = splitWords(line.text || "");
+  const syllables = words.map((word) => Math.max(1, (word.match(VOWELS) || []).length));
+  const total = syllables.reduce((sum, value) => sum + value, 0) || 1;
+  return Math.min(gapMs * 0.85, total * 300);
 }
 
 function tick(stamp = 0) {
