@@ -105,9 +105,17 @@ export async function loadTrackLyrics(
   mode: LyricsSource = lyricsMode(),
   force = false,
 ): Promise<LyricsResult | null> {
+  const primary = sourceOrder(mode);
+  const order =
+    mode === "auto"
+      ? primary
+      : [
+          ...primary,
+          ...sourceOrder("auto").filter((origin) => !primary.includes(origin)),
+        ];
   let lastError: unknown = null;
 
-  for (const origin of sourceOrder(mode)) {
+  for (const origin of order) {
     try {
       const lyrics =
         origin === "lrclib"
