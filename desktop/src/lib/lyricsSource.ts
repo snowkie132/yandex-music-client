@@ -103,7 +103,9 @@ async function fromMusixmatch(track: Track): Promise<Lyrics | null> {
 
 async function fromYandex(track: Track): Promise<Lyrics | null> {
   const found = await api.lyrics(track.id);
-  if (isPaywallLyrics(found)) return null;
+  if (isPaywallLyrics(found)) {
+    throw new Error("Яндекс отдаёт тексты только с Плюсом");
+  }
   return hasText(found) ? found : null;
 }
 
@@ -112,17 +114,9 @@ export async function loadTrackLyrics(
   mode: LyricsSource = lyricsMode(),
   force = false,
 ): Promise<LyricsResult | null> {
-  const primary = sourceOrder(mode);
-  const order =
-    mode === "auto"
-      ? primary
-      : [
-          ...primary,
-          ...sourceOrder("auto").filter((origin) => !primary.includes(origin)),
-        ];
   let lastError: unknown = null;
 
-  for (const origin of order) {
+  for (const origin of sourceOrder(mode)) {
     try {
       const lyrics =
         origin === "betterlyrics"

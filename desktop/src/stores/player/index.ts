@@ -1416,19 +1416,30 @@ export const usePlayerStore = defineStore("player", {
           this.lyricsError = null;
           if (!isPaywallLyrics(found.lyrics)) writeCache(key, found.lyrics);
         } else if (!hasText(this.lyrics)) {
+          const labels: Record<string, string> = {
+            betterlyrics: "Better Lyrics",
+            lrclib: "LRCLIB",
+            yandex: "Яндексе",
+            musixmatch: "Musixmatch",
+          };
           this.lyrics = null;
           this.lyricsOrigin = null;
-          this.lyricsError = "Текста для этого трека нет";
+          this.lyricsError = pick
+            ? `В ${labels[pick] ?? pick} текста нет`
+            : "Текста для этого трека нет";
         }
       } catch (error) {
         if (this.current?.id !== track.id) return;
         if (!hasText(this.lyrics)) {
-          const message = typeof error === "string" ? error : "";
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "";
           this.lyrics = null;
           this.lyricsOrigin = null;
-          this.lyricsError = message.includes("Плюс")
-            ? "Яндекс отдаёт тексты только с Плюсом"
-            : "Не удалось загрузить текст";
+          this.lyricsError = message || "Не удалось загрузить текст";
         }
       } finally {
         if (this.current?.id === track.id) this.lyricsLoading = false;
