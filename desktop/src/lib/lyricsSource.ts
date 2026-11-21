@@ -35,6 +35,14 @@ export function sourceOrder(mode: LyricsSource): LyricsOrigin[] {
   }
 }
 
+const PAYWALL_MARK = "Подключите подписку";
+
+export function isPaywallLyrics(value: Lyrics | null | undefined): boolean {
+  return Boolean(
+    value?.lines?.some((line) => (line.text || "").includes(PAYWALL_MARK)),
+  );
+}
+
 export function hasText(value: Lyrics | null | undefined): value is Lyrics {
   return Boolean(value?.lines?.some((line) => (line.text || "").trim()));
 }
@@ -88,6 +96,7 @@ async function fromGenius(
 
 async function fromYandex(track: Track): Promise<Lyrics | null> {
   const found = await api.lyrics(track.id);
+  if (isPaywallLyrics(found)) return null;
   return hasText(found) ? found : null;
 }
 

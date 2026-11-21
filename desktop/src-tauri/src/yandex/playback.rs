@@ -19,6 +19,9 @@ fn lyrics_from_text(
     text: &str,
     writers: Vec<String>,
 ) -> Result<LyricsDto, String> {
+    if text.contains("Подключите подписку") {
+        return Err("Текст песни доступен только с подпиской Плюс".to_string());
+    }
     let lines = parse_lrc(text);
     if lines.is_empty() {
         return Err("Для этого трека текста нет".to_string());

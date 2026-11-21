@@ -32,7 +32,7 @@ import {
 } from "@/lib/mediaSession";
 import { readCache, releaseMemoryCache, writeCache } from "@/lib/cache";
 import type { LyricsOrigin } from "@/lib/lyricsSource";
-import { hasText, loadTrackLyrics } from "@/lib/lyricsSource";
+import { hasText, isPaywallLyrics, loadTrackLyrics } from "@/lib/lyricsSource";
 import { proxyStream } from "@/lib/stream";
 import {
   censorUrl,
@@ -1400,7 +1400,7 @@ export const usePlayerStore = defineStore("player", {
 
       const key = pick ? `lyrics.${track.id}.${pick}` : `lyrics.${track.id}`;
       const cached = force ? null : readCache<Lyrics>(key);
-      if (hasText(cached)) {
+      if (hasText(cached) && !isPaywallLyrics(cached)) {
         this.lyrics = cached;
         this.lyricsLoading = false;
       } else {
@@ -1414,18 +1414,21 @@ export const usePlayerStore = defineStore("player", {
           this.lyrics = found.lyrics;
           this.lyricsOrigin = found.origin;
           this.lyricsError = null;
-          writeCache(key, found.lyrics);
+          if (!isPaywallLyrics(found.lyrics)) writeCache(key, found.lyrics);
         } else if (!hasText(this.lyrics)) {
           this.lyrics = null;
           this.lyricsOrigin = null;
           this.lyricsError = "Текста для этого трека нет";
         }
-      } catch {
+      } catch (error) {
         if (this.current?.id !== track.id) return;
         if (!hasText(this.lyrics)) {
+          const message = typeof error === "string" ? error : "";
           this.lyrics = null;
           this.lyricsOrigin = null;
-          this.lyricsError = "Не удалось загрузить текст";
+          this.lyricsError = message.includes("Плюс")
+            ? "Яндекс отдаёт тексты только с Плюсом"
+            : "Не удалось загрузить текст";
         }
       } finally {
         if (this.current?.id === track.id) this.lyricsLoading = false;
