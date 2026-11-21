@@ -589,7 +589,7 @@ import { useRoute, useRouter } from "vue-router";
 import LyricsSettingsPanel from "@/components/player/LyricsSettingsPanel.vue";
 import TrackMenu from "@/components/common/TrackMenu.vue";
 import { api } from "@/api/client";
-import type { GeniusQuote } from "@/api/types";
+import type { GeniusQuote, LyricsLine } from "@/api/types";
 import { audio } from "@/lib/audio";
 import { useVisualizer } from "@/composables/useVisualizer";
 import { artistNames } from "@/lib/format";
@@ -1058,6 +1058,28 @@ let raf = 0;
 let lastAudioMs = -1;
 let lastStamp = 0;
 
+// Темп строки: медиана «мс на символ» по треку, чтобы не растягивать
+// заливку на паузы перед следующей строкой.
+const charMs = computed(() => {
+  const list = lines.value;
+  const ratios: number[] = [];
+  for (let i = 0; i < list.length - 1; i += 1) {
+    const gap = list[i + 1].time_ms - list[i].time_ms;
+    const chars = Array.from(list[i].text || "").length;
+    if (gap > 400 && chars >= 4) ratios.push(gap / chars);
+  }
+  if (!ratios.length) return 55;
+  ratios.sort((a, b) => a - b);
+  const quarter = ratios[Math.floor(ratios.length * 0.25)];
+  return Math.min(90, Math.max(35, quarter));
+});
+
+function lineSpan(line: LyricsLine, gap: number): number {
+  const chars = Array.from(line.text || "").length;
+  const estimated = Math.max(900, chars * charMs.value);
+  return gap > estimated * 1.6 ? estimated : gap;
+}
+
 function tick(stamp = 0) {
   raf = requestAnimationFrame(tick);
   const index = player.activeLine;
@@ -1078,7 +1100,7 @@ function tick(stamp = 0) {
   if (line) {
     const start = line.time_ms;
     const end = list[index + 1]?.time_ms ?? start + 4200;
-    const span = Math.max(320, end - start);
+    const span = Math.max(320, lineSpan(line, end - start));
     fill.value = Math.min(100, Math.max(0, ((now - start) / span) * 100));
     dotsFill.value = line.text ? 0 : gapProgress(now - start, end - start);
   } else {
