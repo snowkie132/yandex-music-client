@@ -106,6 +106,158 @@ fn remember_meta(url: &str, total: usize, mime: &str) {
     }
 }
 
+const REPAIR_LIMIT: usize = 32 * 1024 * 1024;
+
+static REPAIRED: OnceLock<Mutex<Vec<(String, std::sync::Arc<Vec<u8>>, Instant)>>> = OnceLock::new();
+
+fn repaired_store() -> &'static Mutex<Vec<(String, std::sync::Arc<Vec<u8>>, Instant)>> {
+    REPAIRED.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn cached_repaired(url: &str) -> Option<std::sync::Arc<Vec<u8>>> {
+    let mut store = repaired_store().lock().ok()?;
+    store.retain(|(_, _, at)| at.elapsed().as_secs() < 900);
+    store
+        .iter()
+        .find(|(key, _, _)| key == url)
+        .map(|(_, body, _)| body.clone())
+}
+
+fn remember_repaired(url: &str, body: &[u8]) {
+    if let Ok(mut store) = repaired_store().lock() {
+        store.retain(|(key, _, _)| key != url);
+        store.push((url.to_string(), std::sync::Arc::new(body.to_vec()), Instant::now()));
+        while store.len() > 6 {
+            store.remove(0);
+        }
+    }
+}
+
+fn box_at(data: &[u8], pos: usize) -> Option<(usize, usize, [u8; 4])> {
+    let size32 = u32::from_be_bytes(data.get(pos..pos + 4)?.try_into().ok()? ) as usize;
+    let name: [u8; 4] = data.get(pos + 4..pos + 8)?.try_into().ok()?;
+    let (size, header) = if size32 == 1 {
+        let large = u64::from_be_bytes(data.get(pos + 8..pos + 16)?.try_into().ok()?);
+        (large as usize, 16)
+    } else if size32 == 0 {
+        (data.len().saturating_sub(pos), 8)
+    } else {
+        (size32, 8)
+    };
+    if size < header || pos + size > data.len() {
+        return None;
+    }
+    Some((size, header, name))
+}
+
+fn find_child(data: &[u8], start: usize, end: usize, name: &[u8; 4]) -> Option<(usize, usize)> {
+    let mut pos = start;
+    while pos + 8 <= end {
+        let (size, _, box_name) = box_at(data, pos)?;
+        if &box_name == name {
+            return Some((pos, size));
+        }
+        pos += size;
+    }
+    None
+}
+
+fn fragment_duration(data: &[u8]) -> Option<(f64, u32)> {
+    let mut pos = 0;
+    let mut total: u64 = 0;
+    let mut timescale = 0u32;
+    while pos + 8 <= data.len() {
+        let (size, header, name) = box_at(data, pos)?;
+        if &name == b"sidx" {
+            let base = pos + header;
+            let version = *data.get(base)?;
+            timescale = u32::from_be_bytes(data.get(base + 8..base + 12)?.try_into().ok()?);
+            let (count_at, entries_at) = if version == 0 {
+                (base + 22, base + 24)
+            } else {
+                (base + 30, base + 32)
+            };
+            let count = u16::from_be_bytes(data.get(count_at..count_at + 2)?.try_into().ok()?);
+            for index in 0..count as usize {
+                let at = entries_at + index * 12;
+                let duration = u32::from_be_bytes(data.get(at + 4..at + 8)?.try_into().ok()?);
+                total += duration as u64;
+            }
+        }
+        pos += size;
+    }
+    if total == 0 || timescale == 0 {
+        return None;
+    }
+    Some((total as f64 / timescale as f64, timescale))
+}
+
+// Фрагментированные mp4 (как замены цензуры) не содержат общей длительности:
+// WebKit видит только первый фрагмент и обрезает перемотку. Добавляем mehd.
+fn repair_fragmented_mp4(data: &mut Vec<u8>) -> bool {
+    if data.len() < 16 || &data[4..8] != b"ftyp" {
+        return false;
+    }
+    let Some((moov_pos, moov_size)) = find_child(data, 0, data.len(), b"moov") else {
+        return false;
+    };
+    let Some((mvex_pos, mvex_size)) = find_child(data, moov_pos + 8, moov_pos + moov_size, b"mvex")
+    else {
+        return false;
+    };
+    if find_child(data, mvex_pos + 8, mvex_pos + mvex_size, b"mehd").is_some() {
+        return false;
+    }
+    let Some((mvhd_pos, _)) = find_child(data, moov_pos + 8, moov_pos + moov_size, b"mvhd") else {
+        return false;
+    };
+    let Some((seconds, _)) = fragment_duration(data) else {
+        return false;
+    };
+    let version = data.get(mvhd_pos + 8).copied().unwrap_or(0);
+    let (timescale_at, duration_at, wide) = if version == 0 {
+        (mvhd_pos + 20, mvhd_pos + 24, false)
+    } else {
+        (mvhd_pos + 28, mvhd_pos + 32, true)
+    };
+    let Some(timescale_bytes) = data.get(timescale_at..timescale_at + 4) else {
+        return false;
+    };
+    let timescale = u32::from_be_bytes(timescale_bytes.try_into().unwrap_or([0; 4]));
+    if timescale == 0 {
+        return false;
+    }
+    let duration = (seconds * timescale as f64).round() as u64;
+    if wide {
+        if data.len() < duration_at + 8 {
+            return false;
+        }
+        data[duration_at..duration_at + 8].copy_from_slice(&duration.to_be_bytes());
+    } else {
+        if data.len() < duration_at + 4 {
+            return false;
+        }
+        data[duration_at..duration_at + 4].copy_from_slice(&(duration as u32).to_be_bytes());
+    }
+
+    let mut mehd = Vec::with_capacity(20);
+    mehd.extend_from_slice(&20u32.to_be_bytes());
+    mehd.extend_from_slice(b"mehd");
+    mehd.extend_from_slice(&[1, 0, 0, 0]);
+    mehd.extend_from_slice(&duration.to_be_bytes());
+    let insert_at = mvex_pos + mvex_size;
+    data.splice(insert_at..insert_at, mehd.iter().copied());
+    let bump = |data: &mut Vec<u8>, pos: usize, by: u32| {
+        if let Some(bytes) = data.get_mut(pos..pos + 4) {
+            let size = u32::from_be_bytes(bytes.try_into().unwrap_or([0; 4]));
+            bytes.copy_from_slice(&size.saturating_add(by).to_be_bytes());
+        }
+    };
+    bump(data, mvex_pos, 20);
+    bump(data, moov_pos, 20);
+    true
+}
+
 fn percent_decode(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
@@ -554,6 +706,57 @@ pub fn start_local_server() {
     });
 }
 
+async fn serve_buffer(
+    socket: &mut tokio::net::TcpStream,
+    method: &str,
+    range: Option<&str>,
+    body: std::sync::Arc<Vec<u8>>,
+    mime: &str,
+) -> Option<()> {
+    use tokio::io::AsyncWriteExt;
+
+    let total = body.len();
+    let mut status = 200u16;
+    let (start, end) = match range {
+        Some(value) => match parse_range(value, total) {
+            Some((start, limit)) => {
+                status = 206;
+                (start, limit.unwrap_or(total.saturating_sub(1)))
+            }
+            None if total > 0 => {
+                let head = format!(
+                    "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{total}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+                );
+                socket.write_all(head.as_bytes()).await.ok()?;
+                let _ = socket.shutdown().await;
+                return Some(());
+            }
+            None => (0, 0),
+        },
+        None => (0, total.saturating_sub(1)),
+    };
+    let length = if total == 0 { 0 } else { end - start + 1 };
+
+    let mut head = format!(
+        "HTTP/1.1 {status} {}\r\n",
+        if status == 206 { "Partial Content" } else { "OK" }
+    );
+    head.push_str(&format!("Content-Type: {mime}\r\n"));
+    head.push_str(&format!("Content-Length: {length}\r\n"));
+    head.push_str("Accept-Ranges: bytes\r\n");
+    head.push_str("Access-Control-Allow-Origin: *\r\n");
+    if status == 206 {
+        head.push_str(&format!("Content-Range: bytes {start}-{end}/{total}\r\n"));
+    }
+    head.push_str("Connection: close\r\n\r\n");
+    socket.write_all(head.as_bytes()).await.ok()?;
+    if method != "HEAD" && length > 0 {
+        socket.write_all(&body[start..=end]).await.ok()?;
+    }
+    let _ = socket.shutdown().await;
+    Some(())
+}
+
 async fn serve_socket(mut socket: tokio::net::TcpStream) -> Option<()> {
     use futures_util::StreamExt;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -611,6 +814,10 @@ async fn serve_socket(mut socket: tokio::net::TcpStream) -> Option<()> {
         return Some(());
     }
 
+    if let Some(body) = cached_repaired(&target) {
+        return serve_buffer(&mut socket, &method, range.as_deref(), body, "audio/mp4").await;
+    }
+
     let Some(client) = http() else {
         socket
             .write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
@@ -619,7 +826,7 @@ async fn serve_socket(mut socket: tokio::net::TcpStream) -> Option<()> {
         return Some(());
     };
     let mut request = client.get(&target);
-    if let Some(value) = range {
+    if let Some(value) = range.as_deref() {
         request = request.header("Range", value);
     }
     let response = match request.send().await {
@@ -634,14 +841,22 @@ async fn serve_socket(mut socket: tokio::net::TcpStream) -> Option<()> {
     };
 
     let status = response.status();
-    let content_type = response
+    let raw_type = response
         .headers()
         .get("content-type")
         .and_then(|value| value.to_str().ok())
         .unwrap_or("")
         .to_string();
-    let playlist = content_type.to_lowercase().contains("mpegurl")
+    let playlist = raw_type.to_lowercase().contains("mpegurl")
         || target.to_lowercase().contains(".m3u8");
+    // Файлы замен цензуры лежат на GitHub без расширения и с octet-stream,
+    // WebKit такой тип для медиа не принимает.
+    let plain_type = raw_type.is_empty() || raw_type.starts_with("application/octet-stream");
+    let content_type = if plain_type {
+        "audio/mpeg".to_string()
+    } else {
+        raw_type
+    };
 
     let mut head_out = format!(
         "HTTP/1.1 {} {}\r\n",
@@ -660,8 +875,41 @@ async fn serve_socket(mut socket: tokio::net::TcpStream) -> Option<()> {
             socket.write_all(&body).await.ok()?;
         }
     } else {
+        let repairable = status.as_u16() == 200 && plain_type;
+        if repairable {
+            if let Some(length) = response.content_length() {
+                if length as usize <= REPAIR_LIMIT {
+                    let bytes = match response.bytes().await {
+                        Ok(bytes) => bytes,
+                        Err(_) => {
+                            socket
+                                .write_all(
+                                    b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n",
+                                )
+                                .await
+                                .ok()?;
+                            return Some(());
+                        }
+                    };
+                    let mut body = bytes.to_vec();
+                    let repaired = repair_fragmented_mp4(&mut body);
+                    let mime = if repaired { "audio/mp4" } else { content_type.as_str() };
+                    if repaired {
+                        remember_repaired(&target, &body);
+                    }
+                    return serve_buffer(
+                        &mut socket,
+                        &method,
+                        range.as_deref(),
+                        std::sync::Arc::new(body),
+                        mime,
+                    )
+                    .await;
+                }
+            }
+        }
+        head_out.push_str(&format!("Content-Type: {content_type}\r\n"));
         for name in [
-            "content-type",
             "content-length",
             "content-range",
             "accept-ranges",
