@@ -38,6 +38,27 @@
           <span v-if="ui.settings.topbarLogoText">mashiro</span>
         </div>
 
+        <button
+          type="button"
+          class="ml-[10px] grid h-[26px] w-[26px] flex-none place-items-center rounded-[calc(var(--radius)*0.5)] border-0 bg-transparent text-[color:var(--fg-faint)] cursor-pointer transition-[background,color] duration-150 hover:bg-[var(--hover)] hover:text-[color:var(--fg)]"
+          data-no-drag
+          :title="
+            ui.settings.sidebarCollapsed
+              ? 'Показать боковую панель'
+              : 'Скрыть боковую панель'
+          "
+          @click="ui.set('sidebarCollapsed', !ui.settings.sidebarCollapsed)"
+        >
+          <Icon
+            :name="
+              ui.settings.sidebarCollapsed
+                ? 'mingcute:sidebar-left-open-line'
+                : 'mingcute:sidebar-left-close-line'
+            "
+            :size="16"
+          />
+        </button>
+
         <div
           class="absolute inset-0 flex items-center justify-center pointer-events-none"
           data-no-drag
@@ -307,8 +328,7 @@
 
     <q-drawer
       v-if="!panels.hidden && !panels.mini"
-      :model-value="true"
-      show-if-above
+      :model-value="!ui.settings.sidebarCollapsed"
       side="left"
       :width="ui.settings.sidebarWidth"
       :breakpoint="0"
@@ -1069,7 +1089,7 @@ const lyricsVisible = computed(() => player.showLyrics && !!player.current);
 const lyricsBox = computed(() => ({
   top: ui.settings.topbarVisible ? "var(--topbar-height, 46px)" : "0px",
   bottom: "var(--player-height, 78px)",
-  left: `${ui.settings.sidebarWidth}px`,
+  left: ui.settings.sidebarCollapsed ? "0px" : `${ui.settings.sidebarWidth}px`,
   right: rightPanel.value ? "300px" : "0px",
 }));
 

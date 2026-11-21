@@ -110,6 +110,7 @@ export interface InterfaceSettings {
   radius: number;
   density: Density;
   sidebarWidth: number;
+  sidebarCollapsed: boolean;
   searchWidth: number;
   pagePadding: number;
   cardSize: number;
@@ -238,6 +239,7 @@ export const defaultInterfaceSettings: InterfaceSettings = {
   radius: 12,
   density: "comfortable",
   sidebarWidth: 236,
+  sidebarCollapsed: false,
   searchWidth: 480,
   pagePadding: 40,
   cardSize: 150,
