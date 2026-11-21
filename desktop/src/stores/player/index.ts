@@ -7,7 +7,6 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   audio,
   cancelFade,
-  clearWarm,
   currentLevel,
   ensureAnalyser,
   fadeIn,
@@ -20,7 +19,6 @@ import {
   setOutputVolume,
   ensureAudioRunning,
   safePlay,
-  warmNext,
   resumeOnGesture,
 } from "@/lib/audio";
 import {
@@ -1384,15 +1382,6 @@ export const usePlayerStore = defineStore("player", {
           }
         }),
       );
-
-      if (ui.gaplessEnabled) {
-        const upcoming = this.queue[this.index + 1];
-        const entry = upcoming ? prefetched.get(upcoming.id) : undefined;
-        if (entry && !entry.local) warmNext(entry.url);
-        else clearWarm();
-      } else {
-        clearWarm();
-      }
     },
 
     async loadLyrics(force = false, mode?: LyricsSource) {

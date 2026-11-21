@@ -2,36 +2,6 @@ export const audio = new Audio();
 audio.preload = "auto";
 audio.crossOrigin = "anonymous";
 
-let warm: HTMLAudioElement | null = null;
-let warmUrl = "";
-
-export function warmNext(url: string): void {
-  if (!url || url === warmUrl) return;
-  warmUrl = url;
-  if (!warm) {
-    warm = new Audio();
-    warm.preload = "auto";
-    warm.crossOrigin = "anonymous";
-    warm.muted = true;
-    warm.volume = 0;
-  }
-  try {
-    warm.src = url;
-    warm.load();
-  } catch {}
-}
-
-export function clearWarm(): void {
-  if (!warmUrl && !warm) return;
-  warmUrl = "";
-  if (warm) {
-    try {
-      warm.removeAttribute("src");
-      warm.load();
-    } catch {}
-  }
-}
-
 let sourceToken = 0;
 
 export function nextSourceToken(): number {
