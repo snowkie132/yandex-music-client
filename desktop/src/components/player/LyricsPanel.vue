@@ -202,6 +202,13 @@
         <button
           type="button"
           class="px-[13px] py-[6px] border border-[color:rgba(255,255,255,0.12)] rounded-[calc(var(--radius)*1.5)] bg-[rgba(255,255,255,0.06)] text-[color:rgba(255,255,255,0.82)] text-[11.5px] cursor-pointer transition-[background,color] duration-[150ms] ease-[ease] hover:bg-[rgba(255,255,255,0.13)] hover:text-[color:#fff] select-none"
+          @click="choose('genius', true)"
+        >
+          Искать в Genius
+        </button>
+        <button
+          type="button"
+          class="px-[13px] py-[6px] border border-[color:rgba(255,255,255,0.12)] rounded-[calc(var(--radius)*1.5)] bg-[rgba(255,255,255,0.06)] text-[color:rgba(255,255,255,0.82)] text-[11.5px] cursor-pointer transition-[background,color] duration-[150ms] ease-[ease] hover:bg-[rgba(255,255,255,0.13)] hover:text-[color:#fff] select-none"
           @click="choose('auto', true)"
         >
           Автоматически
@@ -602,7 +609,13 @@ import { useUiStore } from "@/stores/ui/index";
 
 type Credit = { id: number; name: string; role: string; image: string };
 
-type SourcePick = "auto" | "betterlyrics" | "lrclib" | "yandex" | "musixmatch";
+type SourcePick =
+  | "auto"
+  | "betterlyrics"
+  | "lrclib"
+  | "yandex"
+  | "musixmatch"
+  | "genius";
 
 const player = usePlayerStore();
 const router = useRouter();
@@ -832,6 +845,7 @@ const sources: Array<{ id: SourcePick; label: string }> = [
   { id: "lrclib", label: "LRCLIB" },
   { id: "yandex", label: "Яндекс" },
   { id: "musixmatch", label: "Musixmatch" },
+  { id: "genius", label: "Genius" },
 ];
 
 const pick = computed<SourcePick>(
@@ -843,7 +857,8 @@ const searchingIn = computed(() => {
   if (pick.value === "lrclib") return "LRCLIB";
   if (pick.value === "yandex") return "Яндексе";
   if (pick.value === "musixmatch") return "Musixmatch";
-  return "Better Lyrics, LRCLIB, Яндексе и Musixmatch";
+  if (pick.value === "genius") return "Genius";
+  return "Better Lyrics, LRCLIB, Яндексе, Musixmatch и Genius";
 });
 
 const originTag = computed(() => {

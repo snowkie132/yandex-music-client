@@ -1,10 +1,11 @@
 import { api } from "@/api/client";
 import type { Lyrics, Track } from "@/api/types";
 import { artistNames } from "@/lib/format";
+import { useGeniusStore } from "@/stores/genius";
 import type { LyricsSource } from "@/stores/ui/defaults";
 import { useUiStore } from "@/stores/ui/index";
 
-export type LyricsOrigin = "betterlyrics" | "lrclib" | "yandex" | "musixmatch";
+export type LyricsOrigin = "betterlyrics" | "lrclib" | "yandex" | "musixmatch" | "genius";
 
 export interface LyricsResult {
   lyrics: Lyrics;
@@ -16,6 +17,7 @@ export const ORIGIN_LABEL: Record<LyricsOrigin, string> = {
   lrclib: "lrclib",
   yandex: "яндекс",
   musixmatch: "musixmatch",
+  genius: "genius",
 };
 
 export function lyricsMode(): LyricsSource {
@@ -32,8 +34,10 @@ export function sourceOrder(mode: LyricsSource): LyricsOrigin[] {
       return ["yandex"];
     case "musixmatch":
       return ["musixmatch"];
+    case "genius":
+      return ["genius"];
     default:
-      return ["betterlyrics", "lrclib", "yandex", "musixmatch"];
+      return ["betterlyrics", "lrclib", "yandex", "musixmatch", "genius"];
   }
 }
 
@@ -115,6 +119,24 @@ async function fromYandex(track: Track): Promise<Lyrics | null> {
   return hasText(found) ? found : null;
 }
 
+async function fromGenius(track: Track, force: boolean): Promise<Lyrics | null> {
+  const genius = useGeniusStore();
+  if (!genius.ready) return null;
+
+  const lines = await genius.lyricsFor(track, force);
+  if (!lines.length) return null;
+
+  const lyrics: Lyrics = {
+    track_id: track.id,
+    synced: false,
+    lines: lines.map((text) => ({ time_ms: 0, text })),
+    writers: (genius.song?.credits || [])
+      .filter((person) => person.role === "Автор")
+      .map((person) => person.name),
+  };
+  return hasText(lyrics) ? lyrics : null;
+}
+
 export async function loadTrackLyrics(
   track: Track,
   mode: LyricsSource = lyricsMode(),
@@ -131,7 +153,9 @@ export async function loadTrackLyrics(
             ? await fromLrclib(track, force)
             : origin === "musixmatch"
               ? await fromMusixmatch(track)
-              : await fromYandex(track);
+              : origin === "genius"
+                ? await fromGenius(track, force)
+                : await fromYandex(track);
       if (lyrics) return { lyrics, origin };
     } catch (error) {
       lastError = error;

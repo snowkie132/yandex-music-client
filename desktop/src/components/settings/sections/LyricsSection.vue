@@ -10,7 +10,7 @@
         <SettingsRow
           column
           label="Источник текста"
-          description="«Авто» - сначала Better Lyrics (пословная синхронизация Apple Music), потом LRCLIB, Яндекс и Musixmatch. В самой панели источник переключается для одного трека."
+          description="«Авто» - сначала Better Lyrics (пословная синхронизация Apple Music), потом LRCLIB, Яндекс, Musixmatch и Genius. В самой панели источник переключается для одного трека."
         >
           <SettingsChoice
             :model-value="ui.settings.lyricsSource"
@@ -325,6 +325,7 @@ const sources: Array<{ value: LyricsSource; label: string }> = [
   { value: "lrclib", label: "LRCLIB" },
   { value: "yandex", label: "Яндекс" },
   { value: "musixmatch", label: "Musixmatch" },
+  { value: "genius", label: "Genius" },
 ];
 
 const fonts: Array<{ value: LyricsFont; label: string }> = [
