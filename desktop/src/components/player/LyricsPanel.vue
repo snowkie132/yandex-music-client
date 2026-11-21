@@ -1260,9 +1260,7 @@ function lineClass(i: number) {
         ? "[text-shadow:0_6px_34px_color-mix(in_srgb,var(--accent)_45%,transparent)]"
         : "[text-shadow:0_6px_34px_rgba(255,255,255,0.16)]"
       : "";
-    const motion =
-      s.value.motion && synced.value ? "lyric-focus-anim" : "";
-    const onBase = "opacity-100 [filter:none] [transform:scale(1.02)]";
+    const onBase = "opacity-100 [filter:none]";
 
     if (s.value.highlight === "karaoke") {
       const karaokeClass = karaokeWordActive(i)
@@ -1275,7 +1273,6 @@ function lineClass(i: number) {
         karaokeClass,
         hoverBase,
         glow,
-        motion,
       ]
         .filter(Boolean)
         .join(" ");
@@ -1291,7 +1288,6 @@ function lineClass(i: number) {
         : "text-[color:#fff] hover:text-[color:rgba(255,255,255,0.86)]",
       hoverBase,
       glow,
-      motion,
     ]
       .filter(Boolean)
       .join(" ");
@@ -1410,7 +1406,9 @@ function scrollToActive(animate: boolean, attempt = 6) {
 
 watch(
   () => player.activeLine,
-  () => scrollToActive(true),
+  () => {
+    void nextTick(() => scrollToActive(true));
+  },
 );
 
 watch(
@@ -1442,10 +1440,6 @@ watch(
   animation: lyrics-fs-in 0.24s ease;
 }
 
-.lyric-focus-anim {
-  animation: lyric-focus 0.56s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
 .lyric-dots-live {
   animation:
     lyricDotsIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) var(--dots-delay) both,
@@ -1457,10 +1451,6 @@ watch(
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lyric-focus-anim {
-    animation: none;
-  }
-
   .lyric-dots-live {
     animation: none;
   }
@@ -1474,17 +1464,6 @@ watch(
   to {
     opacity: 1;
     transform: none;
-  }
-}
-
-@keyframes lyric-focus {
-  from {
-    opacity: 0.5;
-    transform: translateY(7px) scale(0.99);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1.02);
   }
 }
 
