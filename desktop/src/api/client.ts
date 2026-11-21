@@ -252,6 +252,16 @@ export const api = {
 
   lyrics: (id: string) => call<Lyrics>("get_lyrics", { id }),
 
+  betterLyrics: (
+    id: string,
+    title: string,
+    artist: string,
+    duration: number | null,
+  ) => call<Lyrics | null>("better_lyrics", { id, title, artist, duration }),
+
+  musixmatch: (id: string, title: string, artist: string) =>
+    call<Lyrics | null>("musixmatch", { id, title, artist }),
+
   translateLines: (target: string, lines: string[]) =>
     call<string[]>("translate_lines", { target, lines }),
 

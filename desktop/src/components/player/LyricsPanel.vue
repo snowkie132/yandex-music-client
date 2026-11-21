@@ -173,9 +173,9 @@
         {{ player.lyricsError || "Текста для этого трека нет" }}
       </div>
       <div class="max-w-[380px] text-[color:rgba(255,255,255,0.46)] text-[12.5px] leading-[1.5]">
-        Можно поискать в другом источнике: LRCLIB даёт строки с таймингами,
-        Яндекс - официальный текст с таймингами или без, Genius - полный текст с
-        авторами.
+        Можно поискать в другом источнике: Better Lyrics даёт пословную
+        синхронизацию из Apple Music, LRCLIB - строки с таймингами, Яндекс -
+        официальный текст, Musixmatch - свой каталог.
       </div>
       <div class="flex flex-wrap justify-center gap-[6px] mt-[8px]">
         <button
@@ -195,9 +195,9 @@
         <button
           type="button"
           class="px-[13px] py-[6px] border border-[color:rgba(255,255,255,0.12)] rounded-[calc(var(--radius)*1.5)] bg-[rgba(255,255,255,0.06)] text-[color:rgba(255,255,255,0.82)] text-[11.5px] cursor-pointer transition-[background,color] duration-[150ms] ease-[ease] hover:bg-[rgba(255,255,255,0.13)] hover:text-[color:#fff] select-none"
-          @click="choose('genius', true)"
+          @click="choose('betterlyrics', true)"
         >
-          Искать в Genius
+          Искать в Better
         </button>
         <button
           type="button"
@@ -602,7 +602,7 @@ import { useUiStore } from "@/stores/ui/index";
 
 type Credit = { id: number; name: string; role: string; image: string };
 
-type SourcePick = "auto" | "lrclib" | "genius" | "yandex";
+type SourcePick = "auto" | "betterlyrics" | "lrclib" | "yandex" | "musixmatch";
 
 const player = usePlayerStore();
 const router = useRouter();
@@ -828,9 +828,10 @@ function partLabel(text: string): string {
 
 const sources: Array<{ id: SourcePick; label: string }> = [
   { id: "auto", label: "Авто" },
+  { id: "betterlyrics", label: "Better" },
   { id: "lrclib", label: "LRCLIB" },
   { id: "yandex", label: "Яндекс" },
-  { id: "genius", label: "Genius" },
+  { id: "musixmatch", label: "Musixmatch" },
 ];
 
 const pick = computed<SourcePick>(
@@ -838,10 +839,11 @@ const pick = computed<SourcePick>(
 );
 
 const searchingIn = computed(() => {
+  if (pick.value === "betterlyrics") return "Better Lyrics";
   if (pick.value === "lrclib") return "LRCLIB";
   if (pick.value === "yandex") return "Яндексе";
-  if (pick.value === "genius") return "Genius";
-  return "LRCLIB, Яндексе и Genius";
+  if (pick.value === "musixmatch") return "Musixmatch";
+  return "Better Lyrics, LRCLIB, Яндексе и Musixmatch";
 });
 
 const originTag = computed(() => {

@@ -3,6 +3,7 @@ mod files;
 mod genius;
 mod hotkeys;
 mod lrclib;
+mod lyrproviders;
 mod mini;
 mod oauth;
 mod presence;
@@ -128,6 +129,8 @@ pub fn run() {
             genius::genius_clear_cache,
             lrclib::lrclib_lookup,
             lrclib::lrclib_clear_cache,
+            lyrproviders::better_lyrics,
+            lyrproviders::musixmatch,
             translate::translate_lines,
             translate::translate_clear_cache,
             presence::validate_discord_app,

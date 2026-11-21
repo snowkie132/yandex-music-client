@@ -1,11 +1,10 @@
 import { api } from "@/api/client";
 import type { Lyrics, Track } from "@/api/types";
 import { artistNames } from "@/lib/format";
-import { useGeniusStore } from "@/stores/genius";
 import type { LyricsSource } from "@/stores/ui/defaults";
 import { useUiStore } from "@/stores/ui/index";
 
-export type LyricsOrigin = "lrclib" | "genius" | "yandex";
+export type LyricsOrigin = "betterlyrics" | "lrclib" | "yandex" | "musixmatch";
 
 export interface LyricsResult {
   lyrics: Lyrics;
@@ -13,9 +12,10 @@ export interface LyricsResult {
 }
 
 export const ORIGIN_LABEL: Record<LyricsOrigin, string> = {
+  betterlyrics: "better lyrics",
   lrclib: "lrclib",
-  genius: "genius",
   yandex: "яндекс",
+  musixmatch: "musixmatch",
 };
 
 export function lyricsMode(): LyricsSource {
@@ -24,14 +24,16 @@ export function lyricsMode(): LyricsSource {
 
 export function sourceOrder(mode: LyricsSource): LyricsOrigin[] {
   switch (mode) {
+    case "betterlyrics":
+      return ["betterlyrics"];
     case "lrclib":
       return ["lrclib"];
-    case "genius":
-      return ["genius"];
     case "yandex":
       return ["yandex"];
+    case "musixmatch":
+      return ["musixmatch"];
     default:
-      return ["lrclib", "yandex", "genius"];
+      return ["betterlyrics", "lrclib", "yandex", "musixmatch"];
   }
 }
 
@@ -73,25 +75,30 @@ async function fromLrclib(
   return hasText(lyrics) ? lyrics : null;
 }
 
-async function fromGenius(
-  track: Track,
-  force: boolean,
-): Promise<Lyrics | null> {
-  const genius = useGeniusStore();
-  if (!genius.ready) return null;
+function durationSeconds(track: Track): number | null {
+  const ms = track.duration_ms ?? 0;
+  return ms > 0 ? Math.round(ms / 1000) : null;
+}
 
-  const lines = await genius.lyricsFor(track, force);
-  if (!lines.length) return null;
+async function fromBetterLyrics(track: Track): Promise<Lyrics | null> {
+  const found = await api
+    .betterLyrics(
+      track.id.split(":")[0],
+      track.title,
+      mainArtist(track),
+      durationSeconds(track),
+    )
+    .catch(() => null);
+  if (!found || !hasText(found)) return null;
+  return { ...found, track_id: track.id };
+}
 
-  const lyrics: Lyrics = {
-    track_id: track.id,
-    synced: false,
-    lines: lines.map((text) => ({ time_ms: 0, text })),
-    writers: (genius.song?.credits || [])
-      .filter((person) => person.role === "Автор")
-      .map((person) => person.name),
-  };
-  return hasText(lyrics) ? lyrics : null;
+async function fromMusixmatch(track: Track): Promise<Lyrics | null> {
+  const found = await api
+    .musixmatch(track.id.split(":")[0], track.title, mainArtist(track))
+    .catch(() => null);
+  if (!found || !hasText(found)) return null;
+  return { ...found, track_id: track.id };
 }
 
 async function fromYandex(track: Track): Promise<Lyrics | null> {
@@ -118,11 +125,13 @@ export async function loadTrackLyrics(
   for (const origin of order) {
     try {
       const lyrics =
-        origin === "lrclib"
-          ? await fromLrclib(track, force)
-          : origin === "genius"
-            ? await fromGenius(track, force)
-            : await fromYandex(track);
+        origin === "betterlyrics"
+          ? await fromBetterLyrics(track)
+          : origin === "lrclib"
+            ? await fromLrclib(track, force)
+            : origin === "musixmatch"
+              ? await fromMusixmatch(track)
+              : await fromYandex(track);
       if (lyrics) return { lyrics, origin };
     } catch (error) {
       lastError = error;

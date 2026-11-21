@@ -16,7 +16,13 @@ export type Density = "compact" | "comfortable" | "spacious";
 export type CoverStyle = "square" | "soft" | "rounded";
 export type AutoWaveSource = "playlist" | "personal";
 
-export type LyricsSource = "auto" | "lrclib" | "genius" | "yandex";
+export type LyricsSource =
+  | "auto"
+  | "betterlyrics"
+  | "lrclib"
+  | "yandex"
+  | "musixmatch"
+  | "genius";
 
 export type LyricsFont = "sans" | "serif" | "mono" | "custom";
 export type AppFont =
