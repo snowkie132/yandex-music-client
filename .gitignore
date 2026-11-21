@@ -5,6 +5,7 @@ node_modules/
 
 # builds / output
 dist/
+builds/
 dist-ssr/
 build/
 out/
