@@ -36,6 +36,7 @@ import { hasText, isPaywallLyrics, loadTrackLyrics } from "@/lib/lyricsSource";
 import { proxyStream } from "@/lib/stream";
 import {
   censorUrl,
+  censorUrlFor,
   ensureCensorList,
   prefersOriginal,
   setPrefersOriginal,
@@ -1127,7 +1128,7 @@ export const usePlayerStore = defineStore("player", {
 
         if (!source && !preview && ui.censorBypass) {
           await ensureCensorList();
-          const replacement = censorUrl(track.id);
+          const replacement = await censorUrlFor(track);
           this.censorAvailable = Boolean(replacement);
           if (replacement && !prefersOriginal(track.id)) {
             source = replacement;

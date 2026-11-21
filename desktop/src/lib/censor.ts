@@ -1,3 +1,7 @@
+import { api } from "@/api/client";
+import type { Track } from "@/api/types";
+import { artistNames } from "@/lib/format";
+
 const LIST_URL =
   "https://raw.githubusercontent.com/Hazzz895/FckCensorData/refs/heads/main/list.json";
 const CACHE_KEY = "mashiro.censor.map";
@@ -57,6 +61,7 @@ export async function ensureCensorList(): Promise<void> {
       }
       map = next;
       loaded = true;
+      altCache.clear();
       persist();
     })
     .catch(() => {
@@ -76,6 +81,41 @@ export function isCensored(id: string | null | undefined): boolean {
 export function censorUrl(id: string | null | undefined): string | null {
   if (!id) return null;
   return map[key(String(id))] ?? null;
+}
+
+const altCache = new Map<string, string | null>();
+
+function norm(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+// Если чистого варианта этого трека в списке нет, ищем тот же трек в других
+// изданиях (сингл, делюкс, ремастер) — там он может быть под другим id.
+export async function censorUrlFor(track: Track): Promise<string | null> {
+  const direct = censorUrl(track.id);
+  if (direct) return direct;
+  const id = key(track.id);
+  if (altCache.has(id)) return altCache.get(id) ?? null;
+  let found: string | null = null;
+  try {
+    const query = `${track.title} ${artistNames(track.artists)}`.trim();
+    const result = await api.search(query);
+    const wanted = norm(track.title);
+    for (const item of result.tracks || []) {
+      if (key(item.id) === id) continue;
+      if (norm(item.title) !== wanted) continue;
+      const url = censorUrl(item.id);
+      if (url) {
+        found = url;
+        break;
+      }
+    }
+  } catch {}
+  altCache.set(id, found);
+  return found;
 }
 
 const PREFER_KEY = "mashiro.censor.prefer";
