@@ -1058,26 +1058,11 @@ let raf = 0;
 let lastAudioMs = -1;
 let lastStamp = 0;
 
-// Темп строки: медиана «мс на символ» по треку, чтобы не растягивать
-// заливку на паузы перед следующей строкой.
-const charMs = computed(() => {
-  const list = lines.value;
-  const ratios: number[] = [];
-  for (let i = 0; i < list.length - 1; i += 1) {
-    const gap = list[i + 1].time_ms - list[i].time_ms;
-    const chars = Array.from(list[i].text || "").length;
-    if (gap > 400 && chars >= 4) ratios.push(gap / chars);
-  }
-  if (!ratios.length) return 55;
-  ratios.sort((a, b) => a - b);
-  const quarter = ratios[Math.floor(ratios.length * 0.25)];
-  return Math.min(90, Math.max(35, quarter));
-});
-
-function lineSpan(line: LyricsLine, gap: number): number {
-  const chars = Array.from(line.text || "").length;
-  const estimated = Math.max(900, chars * charMs.value);
-  return gap > estimated * 1.6 ? estimated : gap;
+// Оценка длительности строки: раскладываем подсветку на время пения, а не
+// на весь промежуток до следующей строки вместе с паузой.
+function lineSpan(line: LyricsLine, gapMs: number): number {
+  const chars = (line.text || "").replace(/\s+/g, "").length;
+  return Math.min(gapMs, Math.max(1100, chars * 190));
 }
 
 function tick(stamp = 0) {
