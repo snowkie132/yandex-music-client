@@ -167,8 +167,6 @@ export interface InterfaceSettings {
   miniWidth: number;
   miniHeight: number;
   playerVisualizer: boolean;
-  speedupRate: number;
-  slowedRate: number;
   lyricsFontSize: number;
   lyricsLineHeight: number;
   lyricsWeight: number;
@@ -298,8 +296,6 @@ export const defaultInterfaceSettings: InterfaceSettings = {
   miniWidth: 396,
   miniHeight: 152,
   playerVisualizer: true,
-  speedupRate: 1.18,
-  slowedRate: 0.85,
   lyricsFontSize: 36,
   lyricsLineHeight: 1.18,
   lyricsWeight: 700,

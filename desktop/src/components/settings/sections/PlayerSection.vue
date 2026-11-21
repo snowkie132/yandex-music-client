@@ -48,28 +48,6 @@
         @update:model-value="ui.set('playerVisualizer', $event)"
       />
 
-      <SettingSlider
-        label="Скорость Sped up"
-        description="Множитель для ускоренной версии трека (меню трека → Sped up)."
-        :model-value="ui.settings.speedupRate"
-        :min="1"
-        :max="1.5"
-        :step="0.01"
-        suffix="×"
-        @update:model-value="ui.set('speedupRate', $event)"
-      />
-
-      <SettingSlider
-        label="Скорость Slowed"
-        description="Множитель для замедленной версии трека (меню трека → Slowed)."
-        :model-value="ui.settings.slowedRate"
-        :min="0.5"
-        :max="1"
-        :step="0.01"
-        suffix="×"
-        @update:model-value="ui.set('slowedRate', $event)"
-      />
-
       <SettingToggle
         label="Показывать тайминги"
         description="Текущее время и длительность по краям полосы прогресса."
@@ -100,7 +78,6 @@
 
 <script setup lang="ts">
 import { useRoute, useRouter } from "vue-router";
-import SettingSlider from "@/components/settings/SettingSlider.vue";
 import SettingToggle from "@/components/settings/SettingToggle.vue";
 import SettingsCard from "@/components/settings/SettingsCard.vue";
 import SettingsRow from "@/components/settings/SettingsRow.vue";

@@ -14,53 +14,6 @@
       </button>
     </div>
 
-    <div class="pt-[6px] px-[12px] pb-[10px] border-t border-[color:rgba(255,255,255,0.07)]">
-      <div class="mb-[9px] text-[color:rgba(255,255,255,0.42)] text-[10px] font-[620] tracking-[0.08em] uppercase">Версия трека</div>
-
-      <div class="grid grid-flow-col [grid-auto-columns:1fr] gap-[3px] mb-[11px] p-[3px] rounded-[calc(var(--radius)*0.75)] bg-[rgba(255,255,255,0.06)]">
-        <button
-          v-for="item in variants"
-          :key="item.id"
-          type="button"
-          :class="segBtnClass(currentVariant === item.id)"
-          :disabled="!player.current"
-          @click="chooseVariant(item.id)"
-        >
-          {{ item.label }}
-        </button>
-      </div>
-
-      <label class="block mb-[11px]">
-        <span class="flex items-baseline justify-between gap-[8px] mb-[3px] text-[color:rgba(255,255,255,0.56)] text-[11.5px] [&_b]:text-[color:rgba(255,255,255,0.9)] [&_b]:tabular-nums [&_b]:font-[560]">
-          <span>Скорость Sped up</span><b>×{{ s.speedupRate.toFixed(2) }}</b>
-        </span>
-        <input
-          :class="RANGE_CLASS"
-          type="range"
-          min="1"
-          max="1.5"
-          step="0.01"
-          :value="s.speedupRate"
-          @input="onNum('speedupRate', $event)"
-        />
-      </label>
-
-      <label class="block mb-[11px]">
-        <span class="flex items-baseline justify-between gap-[8px] mb-[3px] text-[color:rgba(255,255,255,0.56)] text-[11.5px] [&_b]:text-[color:rgba(255,255,255,0.9)] [&_b]:tabular-nums [&_b]:font-[560]">
-          <span>Скорость Slowed</span><b>×{{ s.slowedRate.toFixed(2) }}</b>
-        </span>
-        <input
-          :class="RANGE_CLASS"
-          type="range"
-          min="0.5"
-          max="1"
-          step="0.01"
-          :value="s.slowedRate"
-          @input="onNum('slowedRate', $event)"
-        />
-      </label>
-    </div>
-
     <div class="pt-[6px] px-[12px] pb-[10px]">
       <div class="mb-[9px] text-[color:rgba(255,255,255,0.42)] text-[10px] font-[620] tracking-[0.08em] uppercase">Текст</div>
 
@@ -451,30 +404,9 @@ import type {
   LyricsSource,
   LyricsTranslateMode,
 } from "@/stores/ui/defaults";
-import { usePlayerStore } from "@/stores/player/index";
-import { variantFor, type TrackVariant } from "@/lib/trackVariants";
 import { useUiStore } from "@/stores/ui/index";
 
 const ui = useUiStore();
-const player = usePlayerStore();
-const variantTick = ref(0);
-
-const variants: Array<{ id: TrackVariant; label: string }> = [
-  { id: "normal", label: "Обычная" },
-  { id: "speedup", label: "Sped up" },
-  { id: "slowed", label: "Slowed" },
-];
-
-const currentVariant = computed<TrackVariant>(() => {
-  void variantTick.value;
-  return variantFor(player.current?.id);
-});
-
-function chooseVariant(id: TrackVariant): void {
-  if (!player.current) return;
-  player.setTrackVariant(player.current.id, id);
-  variantTick.value += 1;
-}
 const s = computed(() => ui.settings);
 
 const RANGE_CLASS =
@@ -525,8 +457,6 @@ type NumericKey =
   | "lyricsWeight"
   | "lyricsInactive"
   | "lyricsOffset"
-  | "speedupRate"
-  | "slowedRate"
   | "lyricsLineBlur"
   | "lyricsBackgroundBlur"
   | "lyricsBackgroundOpacity";
