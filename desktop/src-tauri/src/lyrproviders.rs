@@ -1,4 +1,5 @@
-use std::time::Duration;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::yandex::{urlencode, LyricsDto, LyricsLineDto};
 
@@ -219,6 +220,163 @@ fn mxm_sign(url: &str) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(MXM_KEY.as_bytes()).expect("hmac key");
     mac.update(format!("{url}{}", utc_day()).as_bytes());
     BASE64.encode(mac.finalize().into_bytes())
+}
+
+const MXM_ANDROID_SITE: &str = "https://apic.musixmatch.com/ws/1.1/";
+const MXM_ANDROID_APP: &str = "android-player-v1.0";
+const MXM_ANDROID_SECRET: &[u8] = b"mNdca@6W7TeEcFn6*3.s97sJ*yPMd";
+const MXM_ANDROID_UA: &str = "Dalvik/2.1.0 (Linux; U; Android 13; Pixel 6 Build/T3B2.230316.003)";
+
+static MXM_ANDROID_TOKEN: OnceLock<Mutex<Option<(String, Instant)>>> = OnceLock::new();
+
+fn android_token_state() -> &'static Mutex<Option<(String, Instant)>> {
+    MXM_ANDROID_TOKEN.get_or_init(|| Mutex::new(None))
+}
+
+fn android_sign(url: &str) -> String {
+    use base64::engine::general_purpose::STANDARD as BASE64;
+    use base64::Engine as _;
+    use hmac::{Hmac, Mac};
+    use sha1::Sha1;
+
+    let mut mac = Hmac::<Sha1>::new_from_slice(MXM_ANDROID_SECRET).expect("hmac key");
+    mac.update(format!("{url}{}", utc_day()).as_bytes());
+    let signature = format!("{}\n", BASE64.encode(mac.finalize().into_bytes()));
+    urlencode(&signature)
+}
+
+async fn android_token(http: &reqwest::Client, remint: bool) -> Option<String> {
+    if !remint {
+        if let Ok(state) = android_token_state().lock() {
+            if let Some((token, at)) = state.as_ref() {
+                if at.elapsed().as_secs() < 600 {
+                    return Some(token.clone());
+                }
+            }
+        }
+    }
+    let mut url = url::Url::parse(&format!("{MXM_ANDROID_SITE}token.get")).ok()?;
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("app_id", MXM_ANDROID_APP);
+        query.append_pair("format", "json");
+        query.append_pair("user_language", "en");
+    }
+    let signed = format!(
+        "{}&signature={}&signature_protocol=sha1",
+        url.as_str(),
+        android_sign(url.as_str())
+    );
+    let response = http
+        .get(signed)
+        .header("user-agent", MXM_ANDROID_UA)
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = response.json().await.ok()?;
+    let token = body
+        .get("message")?
+        .get("body")?
+        .get("user_token")?
+        .as_str()?
+        .to_string();
+    if token.is_empty() || token.chars().all(|ch| ch == '0') {
+        return None;
+    }
+    if let Ok(mut state) = android_token_state().lock() {
+        *state = Some((token.clone(), Instant::now()));
+    }
+    Some(token)
+}
+
+async fn android_api(
+    http: &reqwest::Client,
+    method: &str,
+    params: &[(&str, String)],
+    remint: bool,
+) -> Option<serde_json::Value> {
+    let token = android_token(http, remint).await?;
+    let mut url = url::Url::parse(&format!("{MXM_ANDROID_SITE}{method}")).ok()?;
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("app_id", MXM_ANDROID_APP);
+        query.append_pair("format", "json");
+        query.append_pair("usertoken", &token);
+        for (key, value) in params {
+            query.append_pair(key, value);
+        }
+    }
+    let signed = format!(
+        "{}&signature={}&signature_protocol=sha1",
+        url.as_str(),
+        android_sign(url.as_str())
+    );
+    let response = http
+        .get(signed)
+        .header("user-agent", MXM_ANDROID_UA)
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = response.json().await.ok()?;
+    let message = body.get("message")?;
+    let code = message
+        .get("header")
+        .and_then(|header| header.get("status_code"))
+        .and_then(|value| value.as_i64());
+    if code == Some(401) && !remint {
+        return Box::pin(android_api(http, method, params, true)).await;
+    }
+    if code != Some(200) {
+        return None;
+    }
+    message.get("body").cloned()
+}
+
+fn macro_inner<'a>(calls: &'a serde_json::Value, name: &str) -> Option<&'a serde_json::Value> {
+    calls
+        .get(name)?
+        .get("message")?
+        .get("body")
+}
+
+fn macro_lines(calls: &serde_json::Value) -> Vec<LyricsLineDto> {
+    if let Some(body) = macro_inner(calls, "track.richsync.get")
+        .and_then(|value| value.get("richsync"))
+        .and_then(|value| value.get("richsync_body"))
+        .and_then(|value| value.as_str())
+    {
+        let lines = richsync_lines(body);
+        if lines.len() >= 2 {
+            return lines;
+        }
+    }
+    if let Some(body) = macro_inner(calls, "track.subtitles.get")
+        .and_then(|value| value.get("subtitle_list"))
+        .and_then(|value| value.as_array())
+        .and_then(|list| list.first())
+        .and_then(|item| item.get("subtitle"))
+        .and_then(|value| value.get("subtitle_body"))
+        .and_then(|value| value.as_str())
+    {
+        let lines = crate::yandex::parse_lrc(body);
+        if lines.len() >= 2 {
+            return lines;
+        }
+    }
+    if let Some(body) = macro_inner(calls, "track.lyrics.get")
+        .and_then(|value| value.get("lyrics"))
+        .and_then(|value| value.get("lyrics_body"))
+        .and_then(|value| value.as_str())
+    {
+        return clean_plain(body);
+    }
+    Vec::new()
 }
 
 const MXM_PAGE_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
@@ -543,6 +701,114 @@ fn pick_track(list: &[serde_json::Value], title: &str, artist: &str, duration: u
     }
 }
 
+fn android_pick<'a>(list: &'a [serde_json::Value], title: &str, artist: &str) -> Option<&'a serde_json::Value> {
+    let wanted_title = norm(title);
+    let wanted_artist = norm(artist);
+    let mut best: Option<(&serde_json::Value, i32)> = None;
+    for item in list {
+        let Some(track) = item.get("track") else { continue };
+        if track.get("has_richsync").and_then(|value| value.as_bool()) != Some(true) {
+            continue;
+        }
+        let name = norm(track.get("track_name").and_then(|v| v.as_str()).unwrap_or(""));
+        let author = norm(track.get("artist_name").and_then(|v| v.as_str()).unwrap_or(""));
+        if name.is_empty() || author.is_empty() {
+            continue;
+        }
+        let mut score = 0;
+        if name == wanted_title { score += 100; } else if name.contains(&wanted_title) || wanted_title.contains(&name) { score += 60; }
+        if author == wanted_artist { score += 60; } else if author.contains(&wanted_artist) || wanted_artist.contains(&author) { score += 30; }
+        if score < 90 { continue; }
+        if best.map(|(_, value)| score > value).unwrap_or(true) {
+            best = Some((track, score));
+        }
+    }
+    best.map(|(track, _)| track)
+}
+
+async fn android_lookup(
+    http: &reqwest::Client,
+    id: &str,
+    title: &str,
+    artist: &str,
+) -> Option<LyricsDto> {
+    let mut lines: Vec<LyricsLineDto> = Vec::new();
+
+    if let Some(calls) = android_api(
+        http,
+        "macro.subtitles.get",
+        &[
+            ("namespace", "lyrics_richsynced".to_string()),
+            ("optional_calls", "track.richsync".to_string()),
+            ("subtitle_format", "lrc".to_string()),
+            ("q_artist", artist.to_string()),
+            ("q_track", title.to_string()),
+        ],
+        false,
+    )
+    .await
+    .and_then(|body| body.get("macro_calls").cloned())
+    {
+        lines = macro_lines(&calls);
+    }
+
+    let has_words = lines.iter().any(|line| !line.words.is_empty());
+    if !has_words {
+        if let Some(body) = android_api(
+            http,
+            "track.search",
+            &[
+                ("q", format!("{title} {artist}")),
+                ("page_size", "20".to_string()),
+                ("f_has_lyrics", "true".to_string()),
+            ],
+            false,
+        )
+        .await
+        {
+            let empty: Vec<serde_json::Value> = Vec::new();
+            let list = body
+                .get("track_list")
+                .and_then(|value| value.as_array())
+                .unwrap_or(&empty);
+            if let Some(track) = android_pick(list, title, artist) {
+                if let Some(track_id) = track.get("track_id").and_then(|value| value.as_i64()) {
+                    if let Some(calls) = android_api(
+                        http,
+                        "macro.subtitles.get",
+                        &[
+                            ("namespace", "lyrics_richsynced".to_string()),
+                            ("optional_calls", "track.richsync".to_string()),
+                            ("subtitle_format", "lrc".to_string()),
+                            ("track_id", track_id.to_string()),
+                        ],
+                        false,
+                    )
+                    .await
+                    .and_then(|body| body.get("macro_calls").cloned())
+                    {
+                        let found = macro_lines(&calls);
+                        if found.iter().any(|line| !line.words.is_empty()) {
+                            lines = found;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if lines.len() < 2 {
+        return None;
+    }
+    let synced = lines.iter().any(|line| line.time_ms > 0);
+    Some(LyricsDto {
+        track_id: id.to_string(),
+        synced,
+        lines,
+        writers: Vec::new(),
+    })
+}
+
 #[tauri::command]
 pub async fn musixmatch(
     id: String,
@@ -551,6 +817,9 @@ pub async fn musixmatch(
     duration: Option<u32>,
 ) -> Result<Option<LyricsDto>, String> {
     let http = client();
+    if let Some(dto) = android_lookup(&http, &id, &title, &artist).await {
+        return Ok(Some(dto));
+    }
     let search = mxm_api(
         &http,
         "track.search",
