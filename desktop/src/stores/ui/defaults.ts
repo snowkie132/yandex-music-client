@@ -169,6 +169,7 @@ export interface InterfaceSettings {
   lyricsBackgroundOpacity: number;
   lyricsLineBlur: number;
   lyricsInactive: number;
+  lyricsOffset: number;
   lyricsAlign: LyricsAlign;
   lyricsBackdrop: LyricsBackdrop;
   lyricsHighlight: LyricsHighlight;
@@ -296,6 +297,7 @@ export const defaultInterfaceSettings: InterfaceSettings = {
   lyricsBackgroundOpacity: 48,
   lyricsLineBlur: 2.5,
   lyricsInactive: 32,
+  lyricsOffset: 0,
   lyricsAlign: "left",
   lyricsBackdrop: "cover",
   lyricsHighlight: "white",

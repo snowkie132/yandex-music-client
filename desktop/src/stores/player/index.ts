@@ -304,7 +304,7 @@ export const usePlayerStore = defineStore("player", {
     activeLine: (s) => {
       const lines = s.lyrics?.lines || [];
       if (!s.lyrics?.synced || !lines.length) return -1;
-      const ms = s.progress * 1000;
+      const ms = (s.progress + useUiStore().settings.lyricsOffset) * 1000;
       let found = -1;
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];

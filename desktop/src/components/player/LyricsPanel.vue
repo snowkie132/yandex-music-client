@@ -1066,7 +1066,7 @@ function tick(stamp = 0) {
   // currentTime в WebKit обновляется реже кадров, поэтому между его
   // обновлениями дорисовываем позицию по времени кадров — иначе заливка
   // выглядит как 30 Гц.
-  const raw = audio.currentTime * 1000;
+  const raw = (audio.currentTime + ui.settings.lyricsOffset) * 1000;
   if (lastStamp === 0 || raw !== lastAudioMs) {
     lastAudioMs = raw;
     lastStamp = stamp;
@@ -1127,7 +1127,7 @@ function setLineRef(el: unknown, i: number) {
 }
 
 function seekTo(ms: number) {
-  if (synced.value && ms >= 0) player.seek(ms / 1000);
+  if (synced.value && ms >= 0) player.seek(ms / 1000 - ui.settings.lyricsOffset);
 }
 
 const ICON_BTN_BASE =

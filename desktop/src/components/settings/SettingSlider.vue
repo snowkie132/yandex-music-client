@@ -48,5 +48,7 @@ const props = defineProps<{
   suffix?: string;
 }>();
 const emit = defineEmits<{ "update:modelValue": [number] }>();
-const displayValue = computed(() => `${props.modelValue}${props.suffix || ""}`);
+const displayValue = computed(
+  () => `${Number(props.modelValue.toFixed(2))}${props.suffix || ""}`,
+);
 </script>

@@ -129,6 +129,17 @@
           suffix="%"
           @update:model-value="ui.set('lyricsInactive', $event)"
         />
+
+        <SettingSlider
+          label="Смещение текста"
+          description="Сдвинуть текст раньше или позже музыки, в секундах."
+          :model-value="ui.settings.lyricsOffset"
+          :min="-10"
+          :max="10"
+          :step="0.1"
+          suffix=" с"
+          @update:model-value="ui.set('lyricsOffset', $event)"
+        />
       </SettingsCard>
 
       <SettingsCard>

@@ -187,6 +187,21 @@
           @input="onNum('lyricsInactive', $event)"
         />
       </label>
+
+      <label class="block mb-[11px]">
+        <span class="flex items-baseline justify-between gap-[8px] mb-[3px] text-[color:rgba(255,255,255,0.56)] text-[11.5px] [&_b]:text-[color:rgba(255,255,255,0.9)] [&_b]:tabular-nums [&_b]:font-[560]">
+          <span>Смещение текста</span><b>{{ s.lyricsOffset > 0 ? "+" : "" }}{{ s.lyricsOffset.toFixed(1) }} с</b>
+        </span>
+        <input
+          :class="RANGE_CLASS"
+          type="range"
+          min="-10"
+          max="10"
+          step="0.1"
+          :value="s.lyricsOffset"
+          @input="onNum('lyricsOffset', $event)"
+        />
+      </label>
     </div>
 
     <div class="pt-[6px] px-[12px] pb-[10px] border-t border-[color:rgba(255,255,255,0.07)]">
@@ -441,6 +456,7 @@ type NumericKey =
   | "lyricsLineHeight"
   | "lyricsWeight"
   | "lyricsInactive"
+  | "lyricsOffset"
   | "lyricsLineBlur"
   | "lyricsBackgroundBlur"
   | "lyricsBackgroundOpacity";
