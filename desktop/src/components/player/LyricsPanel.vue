@@ -29,7 +29,7 @@
     />
 
     <div
-      class="relative z-[3] grid items-center flex-none gap-[14px] h-[62px] pt-0 pr-[16px] pb-0 pl-[18px] [grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]"
+      class="relative z-[3] grid items-center flex-none gap-[14px] h-[62px] pt-0 pr-[16px] pb-0 pl-[18px] [grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)] opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200 ease-out"
       @mousedown="onHeadDrag"
     >
       <div class="flex items-center min-w-0 gap-[10px]">
