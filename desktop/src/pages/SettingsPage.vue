@@ -59,12 +59,12 @@
 
       <div class="relative flex flex-nowrap min-h-0 flex-1">
         <aside
-          class="flex flex-nowrap min-h-0 w-[276px] flex-none flex-col border-r border-[var(--line)] bg-[var(--bg)] px-3 py-4"
+          class="flex flex-nowrap min-h-0 w-[276px] flex-none flex-col border-r border-[var(--line)] bg-[var(--bg)] px-3 py-4 max-[900px]:w-[64px] max-[900px]:px-2"
         >
           <nav class="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain pr-1">
             <div v-for="group in groups" :key="group.title">
               <div
-                class="px-3 pb-1.5 text-[calc(10px*var(--text-scale,1))] font-semibold uppercase tracking-[0.09em] text-[color:var(--fg-faint)]"
+                class="px-3 pb-1.5 text-[calc(10px*var(--text-scale,1))] font-semibold uppercase tracking-[0.09em] text-[color:var(--fg-faint)] max-[900px]:hidden"
               >
                 {{ group.title }}
               </div>
@@ -91,7 +91,7 @@
                       : 'opacity-70 group-hover:opacity-100'
                   "
                 />
-                <span class="min-w-0 flex-1 truncate">{{
+                <span class="min-w-0 flex-1 truncate max-[900px]:hidden">{{
                   section.label
                 }}</span>
                 <span

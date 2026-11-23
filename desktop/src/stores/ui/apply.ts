@@ -108,7 +108,10 @@ export function applyInterfaceSettings(settings: InterfaceSettings): void {
     "--topbar-avatar": `${settings.topbarAccountAvatarSize}px`,
     "--window-button-width": `${settings.windowButtonWidth}px`,
     "--search-width": `${settings.searchWidth}px`,
-    "--page-padding": `${settings.pagePadding}px`,
+    "--page-padding":
+      typeof window !== "undefined" && window.innerWidth < 900
+        ? `${Math.min(16, settings.pagePadding)}px`
+        : `${settings.pagePadding}px`,
     "--card-size": `${settings.cardSize}px`,
     "--text-scale": `${settings.textScale / 100}`,
     "--app-font": appFontStack(settings),

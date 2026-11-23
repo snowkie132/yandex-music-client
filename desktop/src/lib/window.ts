@@ -38,6 +38,7 @@ export async function startWindowDrag(event: MouseEvent) {
   if (!win) return;
   try {
     await win.startDragging();
+  } catch {
   } finally {
     releaseStuckPointer();
     try {
@@ -49,7 +50,9 @@ export async function startWindowDrag(event: MouseEvent) {
 export async function toggleWindowMaximize(event: MouseEvent) {
   if (interactive(event.target)) return;
   event.preventDefault();
-  await (await currentWindow())?.toggleMaximize();
+  try {
+    await (await currentWindow())?.toggleMaximize();
+  } catch {}
 }
 
 export async function isNativeFullscreen(): Promise<boolean> {

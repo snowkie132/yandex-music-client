@@ -1,6 +1,7 @@
 use std::env;
 
 use ed25519_dalek::SigningKey;
+#[cfg(desktop)]
 use keyring::Entry;
 use together_crypto::encoding::to_base64;
 use together_crypto::identity;
@@ -31,17 +32,30 @@ fn env_seed() -> Option<String> {
     Some(normalized)
 }
 
+#[cfg(desktop)]
 fn entry() -> Result<Entry, String> {
     Entry::new(SERVICE, &account())
         .map_err(|error| format!("хранилище ключей недоступно: {error}"))
+}
+
+#[cfg(not(desktop))]
+fn seed_path() -> Result<std::path::PathBuf, String> {
+    let dir = std::env::temp_dir().join("mashiro-together");
+    std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    Ok(dir.join(format!("{}.seed", account())))
 }
 
 pub fn save(phrase: &str) -> Result<String, String> {
     let normalized = identity::normalize_phrase(phrase);
     identity::keypair_from_phrase(&normalized).map_err(|error| error.to_string())?;
 
+    #[cfg(desktop)]
     entry()?
         .set_password(&normalized)
+        .map_err(|error| format!("не удалось сохранить сид-фразу: {error}"))?;
+
+    #[cfg(not(desktop))]
+    std::fs::write(seed_path()?, normalized.as_bytes())
         .map_err(|error| format!("не удалось сохранить сид-фразу: {error}"))?;
 
     Ok(normalized)
@@ -52,17 +66,47 @@ pub fn load() -> Result<Option<String>, String> {
         return Ok(Some(seed));
     }
 
-    match entry()?.get_password() {
-        Ok(phrase) => Ok(Some(phrase)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(error) => Err(format!("не удалось прочитать хранилище ключей: {error}")),
+    #[cfg(desktop)]
+    {
+        match entry()?.get_password() {
+            Ok(phrase) => Ok(Some(phrase)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(error) => Err(format!("не удалось прочитать хранилище ключей: {error}")),
+        }
+    }
+
+    #[cfg(not(desktop))]
+    {
+        let path = seed_path()?;
+        if !path.exists() {
+            return Ok(None);
+        }
+        let phrase = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+        let trimmed = phrase.trim().to_string();
+        if trimmed.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(trimmed))
+        }
     }
 }
 
 pub fn forget() -> Result<(), String> {
-    match entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(format!("не удалось удалить сид-фразу: {error}")),
+    #[cfg(desktop)]
+    {
+        match entry()?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(error) => Err(format!("не удалось удалить сид-фразу: {error}")),
+        }
+    }
+
+    #[cfg(not(desktop))]
+    {
+        let path = seed_path()?;
+        if path.exists() {
+            std::fs::remove_file(path).map_err(|error| error.to_string())?;
+        }
+        Ok(())
     }
 }
 

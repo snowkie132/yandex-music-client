@@ -258,9 +258,29 @@ export const useUiStore = defineStore("ui", {
     snapshot: null as InterfaceSettings | null,
     playerEditReturnPath: null as string | null,
     chromeEditReturnPath: null as string | null,
+    viewport: typeof window === "undefined" ? 1200 : window.innerWidth,
   }),
 
+  getters: {
+    mobile: (state) => state.viewport < 900,
+  },
+
   actions: {
+    trackViewport() {
+      if (typeof window === "undefined") return;
+      let narrow = window.innerWidth < 900;
+      const update = () => {
+        const next = window.innerWidth < 900;
+        this.viewport = window.innerWidth;
+        if (next !== narrow) {
+          narrow = next;
+          this.apply();
+        }
+      };
+      update();
+      window.addEventListener("resize", update, { passive: true });
+    },
+
     apply() {
       applyInterfaceSettings(this.settings);
       try {

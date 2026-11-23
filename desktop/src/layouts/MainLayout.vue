@@ -308,7 +308,7 @@
         </div>
 
         <WindowControls
-          v-if="ui.settings.topbarShowWindowControls"
+          v-if="ui.settings.topbarShowWindowControls && !ui.mobile"
           :show-minimize="ui.settings.windowShowMinimize"
           :show-maximize="ui.settings.windowShowMaximize"
           :show-close="ui.settings.windowShowClose"
@@ -330,7 +330,8 @@
       v-if="!panels.hidden && !panels.mini"
       :model-value="!ui.settings.sidebarCollapsed"
       side="left"
-      :width="ui.settings.sidebarWidth"
+      :show-if-above="!ui.mobile"
+      :width="drawerWidth"
       :breakpoint="0"
       class="sidebar select-none !bg-[var(--bg)] !border-r !border-[color:var(--line)]"
       content-class="overflow-x-hidden pt-[14px]"
@@ -376,7 +377,11 @@
             @dragover="onSidebarDragOver(item.id, $event)"
             @dragleave="onSidebarDragLeave(item.id)"
             @drop="onSidebarDrop(item.id, $event)"
-            @click="sidebarEditMode ? undefined : router.push(item.to)"
+            @click="
+              sidebarEditMode
+                ? undefined
+                : (router.push(item.to), ui.mobile && ui.set('sidebarCollapsed', true))
+            "
           >
             <Icon
               v-if="sidebarEditMode"
@@ -1084,6 +1089,12 @@ watch(
   },
 );
 
+const drawerWidth = computed(() =>
+  ui.mobile
+    ? Math.min(320, Math.round(ui.viewport * 0.82))
+    : ui.settings.sidebarWidth,
+);
+
 const lyricsVisible = computed(() => player.showLyrics && !!player.current);
 
 const lyricsBox = computed(() => ({
@@ -1384,6 +1395,8 @@ const hotkeyHandlers = {
 };
 
 onMounted(() => {
+  ui.trackViewport();
+  if (ui.mobile) ui.set("sidebarCollapsed", true);
   hotkeys.load();
   bindLocalHotkeys((signature) => hotkeys.resolve(signature), hotkeyHandlers);
   void bindGlobalHotkeyEvents(hotkeyHandlers);

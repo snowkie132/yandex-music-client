@@ -1,17 +1,34 @@
 mod commands;
 mod files;
 mod genius;
-mod hotkeys;
 mod lrclib;
 mod lyrproviders;
+
+#[cfg(desktop)]
 mod mini;
+#[cfg(not(desktop))]
+#[path = "mini_mobile.rs"]
+mod mini;
+
 mod oauth;
 mod presence;
 mod proxy;
 mod state;
 mod together;
 mod translate;
+
+#[cfg(desktop)]
 mod tray;
+#[cfg(not(desktop))]
+#[path = "tray_mobile.rs"]
+mod tray;
+
+#[cfg(desktop)]
+mod hotkeys;
+#[cfg(not(desktop))]
+#[path = "hotkeys_mobile.rs"]
+mod hotkeys;
+
 mod yandex;
 
 use presence::DiscordState;
@@ -33,8 +50,11 @@ pub fn run() {
     #[cfg(windows)]
     set_app_user_model_id();
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build());
+
+    builder
         .register_asynchronous_uri_scheme_protocol(proxy::SCHEME, |_app, request, responder| {
             proxy::handle(request, responder);
         })
@@ -44,6 +64,7 @@ pub fn run() {
         .manage(together::relay::RelayState::default())
         .setup(|app| {
             proxy::start_local_server();
+            #[cfg(desktop)]
             for (_, window) in app.webview_windows() {
                 if let Ok(icon) =
                     tauri::image::Image::from_bytes(include_bytes!("../icons/256x256.png"))
