@@ -947,6 +947,7 @@ function lineMemo(i: number) {
     active ? fill.value : 0,
     active ? dotsFill.value : 0,
     dotsOut.value ? 1 : 0,
+    karaokePop.value ? 1 : 0,
     memoKey.value,
   ];
 }
@@ -954,6 +955,8 @@ function lineMemo(i: number) {
 const wordKaraoke = computed(
   () => karaoke.value && ui.settings.lyricsKaraokeWord,
 );
+
+const karaokePop = computed(() => ui.settings.lyricsKaraokePop !== false);
 
 const DOTS_MIN_GAP = 4000;
 const DOTS_LEAD = 700;
@@ -1094,10 +1097,9 @@ function buildKaraokeWords(
       passed = Math.round(passed * 32) / 32;
       // буква подпрыгивает в момент заливки и плавно возвращается к размеру строки
       const age = nowMs - startAt;
-      const pop =
-        age < 0 || age > POP_MS * 3
-          ? 0
-          : Math.max(0, 1 - age / POP_MS) ** 1.6;
+      const pop = !karaokePop.value || age < 0 || age > POP_MS * 3
+        ? 0
+        : Math.max(0, 1 - age / POP_MS) ** 1.6;
       chars.push({ ch, style: glyphStyle(passed, pop) });
       offset += 1;
       index += 1;

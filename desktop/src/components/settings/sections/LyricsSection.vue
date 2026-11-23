@@ -119,6 +119,13 @@
           @update:model-value="ui.set('lyricsWeight', $event)"
         />
 
+        <SettingToggle
+          label="Буквы подпрыгивают"
+          description="При заливке буква становится крупнее и плавно возвращается к размеру строки. Выключи — останется ровная заливка."
+          :model-value="ui.settings.lyricsKaraokePop"
+          @update:model-value="ui.set('lyricsKaraokePop', $event)"
+        />
+
         <SettingSlider
           label="Яркость остальных строк"
           description="Насколько видны строки вокруг активной."

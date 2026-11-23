@@ -173,6 +173,16 @@
         <span class="relative w-[28px] h-[16px] flex-none rounded-full bg-[rgba(255,255,255,0.18)] transition-[background] duration-[160ms] ease-[ease] [&>i]:absolute [&>i]:top-[3px] [&>i]:left-[3px] [&>i]:w-[10px] [&>i]:h-[10px] [&>i]:rounded-full [&>i]:bg-[rgba(255,255,255,0.8)] [&>i]:[transition:transform_0.16s_cubic-bezier(0.22,0.65,0.28,1)]"><i /></span>
       </button>
 
+      <button
+        type="button"
+        :class="switchClass(s.lyricsKaraokePop)"
+        style="margin-top: 8px"
+        @click="ui.set('lyricsKaraokePop', !s.lyricsKaraokePop)"
+      >
+        <span>Буквы подпрыгивают</span>
+        <span class="relative w-[28px] h-[16px] flex-none rounded-full bg-[rgba(255,255,255,0.18)] transition-[background] duration-[160ms] ease-[ease] [&>i]:absolute [&>i]:top-[3px] [&>i]:left-[3px] [&>i]:w-[10px] [&>i]:h-[10px] [&>i]:rounded-full [&>i]:bg-[rgba(255,255,255,0.8)] [&>i]:[transition:transform_0.16s_cubic-bezier(0.22,0.65,0.28,1)]"><i /></span>
+      </button>
+
       <label class="block mb-[11px]" style="margin-top: 10px">
         <span class="flex items-baseline justify-between gap-[8px] mb-[3px] text-[color:rgba(255,255,255,0.56)] text-[11.5px] [&_b]:text-[color:rgba(255,255,255,0.9)] [&_b]:tabular-nums [&_b]:font-[560]">
           <span>Яркость остальных</span><b>{{ s.lyricsInactive }}%</b>

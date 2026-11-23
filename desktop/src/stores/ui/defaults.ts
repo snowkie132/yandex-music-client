@@ -181,6 +181,7 @@ export interface InterfaceSettings {
   lyricsBackdrop: LyricsBackdrop;
   lyricsHighlight: LyricsHighlight;
   lyricsKaraokeWord: boolean;
+  lyricsKaraokePop: boolean;
   lyricsGlow: boolean;
   lyricsShowArtwork: boolean;
   lyricsMotion: boolean;
@@ -310,6 +311,7 @@ export const defaultInterfaceSettings: InterfaceSettings = {
   lyricsBackdrop: "cover",
   lyricsHighlight: "white",
   lyricsKaraokeWord: true,
+  lyricsKaraokePop: true,
   lyricsGlow: true,
   lyricsShowArtwork: true,
   lyricsMotion: true,
