@@ -1036,7 +1036,10 @@ function alignWordTimes(
   return out;
 }
 
-function glyphStyle(passed: number): Record<string, string> {
+const POP_MS = 260;
+const POP_SCALE = 0.2;
+
+function glyphStyle(passed: number, pop: number): Record<string, string> {
   const alpha = 0.38 + 0.62 * passed;
   const style: Record<string, string> = {
     color: `rgba(255,255,255,${alpha.toFixed(3)})`,
@@ -1048,6 +1051,9 @@ function glyphStyle(passed: number): Record<string, string> {
       `0 0 ${(2 + 3 * passed).toFixed(1)}px rgba(255,255,255,${core}), ` +
       `0 0 ${(9 + 7 * passed).toFixed(1)}px rgba(255,255,255,${halo})`;
   }
+  if (pop > 0.01) {
+    style.transform = `scale(${(1 + POP_SCALE * pop).toFixed(3)})`;
+  }
   return style;
 }
 
@@ -1056,9 +1062,12 @@ function buildKaraokeWords(
   typed: number,
   wordTimes: LyricsWord[] | undefined,
   nowMs: number,
+  lineStart: number,
+  span: number,
 ): KaraokeWord[] {
   const tokens = text.match(/\S+\s*/gu) ?? [];
   if (!tokens.length) return [];
+  const total = Array.from(text).length || 1;
   const timings =
     wordTimes && wordTimes.length >= tokens.length
       ? alignWordTimes(tokens, wordTimes)
@@ -1072,15 +1081,24 @@ function buildKaraokeWords(
     let offset = 0;
     for (const ch of raw) {
       let passed: number;
+      let startAt: number;
       if (timing) {
-        const span = Math.max(120, timing.end - timing.start);
-        const progress = Math.max(0, Math.min(1, (nowMs - timing.start) / span));
+        const wordSpan = Math.max(120, timing.end - timing.start);
+        const progress = Math.max(0, Math.min(1, (nowMs - timing.start) / wordSpan));
         passed = Math.max(0, Math.min(1, progress * length - offset));
+        startAt = timing.start + (wordSpan * offset) / Math.max(1, length);
       } else {
         passed = Math.max(0, Math.min(1, typed - index));
+        startAt = lineStart + (span * index) / total;
       }
       passed = Math.round(passed * 32) / 32;
-      chars.push({ ch, style: glyphStyle(passed) });
+      // буква подпрыгивает в момент заливки и плавно возвращается к размеру строки
+      const age = nowMs - startAt;
+      const pop =
+        age < 0 || age > POP_MS * 3
+          ? 0
+          : Math.max(0, 1 - age / POP_MS) ** 1.6;
+      chars.push({ ch, style: glyphStyle(passed, pop) });
       offset += 1;
       index += 1;
     }
@@ -1096,11 +1114,18 @@ const karaokeWords = computed<KaraokeWord[]>(() => {
   const text = line?.text || "";
   if (!wordKaraoke.value || !text) return [];
   const total = Array.from(text).length;
+  const gap = Math.max(
+    320,
+    (lines.value[player.activeLine + 1]?.time_ms ?? line.time_ms + 4200) -
+      line.time_ms,
+  );
   return buildKaraokeWords(
     text,
     (fill.value / 100) * total,
     line?.words,
     playhead.value,
+    line.time_ms,
+    lineSpan(line, gap),
   );
 });
 
@@ -1515,6 +1540,8 @@ watch(
 
 .karaoke-glyph {
   display: inline-block;
+  transform-origin: 50% 72%;
+  will-change: transform;
 }
 
 .lyrics-fs-anim {
