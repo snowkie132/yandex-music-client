@@ -1,4 +1,4 @@
-# mashiro (v2) — локальная сборка и правки под Linux
+# mashiro (v2) — локальная сборка и правки
 
 ## Где что лежит
 
@@ -60,3 +60,29 @@ pgrep -x mashiro || (setsid mashiro > ~/.local/state/mashiro/mashiro.log 2>&1 &)
   при NVIDIA 10de:2582) — тяжёлые блюры/фильтры бьют по fps, поэтому они и убраны.
 - В микшере PipeWire видно два потока `mashiro` (`webaudio` и `music`) — это норма:
   WebKit делает отдельный поток на `AudioContext` и на медиаэлемент.
+
+## Android
+
+APK собирается из того же дерева (`src-tauri/gen/android` уже сгенерирован и лежит в репозитории).
+
+```bash
+cd ~/mashiro/desktop
+export JAVA_HOME=$HOME/android-dev/jdk-17.0.21+9
+export ANDROID_HOME=$HOME/android-dev/sdk
+export NDK_HOME=$HOME/android-dev/sdk/ndk/27.2.12479018
+export PATH=$JAVA_HOME/bin:$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+npx tauri android build --apk --target aarch64
+```
+
+Готовый APK подписывается автоматически (`builds/android/mashiro.keystore`),
+результат кладётся в `builds/android/mashiro-arm64.apk`. Для эмулятора собирается
+с `--target x86_64`.
+
+Что учтено под телефон:
+- боковая панель — оверлей, по умолчанию свёрнута, открывается кнопкой в шапке;
+- настройки на узком экране сворачиваются в иконный рейл;
+- скрыты оконные кнопки, мини-плеер и трей (в Rust — заглушки `*_mobile.rs`);
+- `gen/android/app/src/main/res/xml/network_security_config.xml` разрешает cleartext
+  только для `127.0.0.1` — без него WebView не пускает поток с локального прокси;
+- безопасные отступы (`env(safe-area-inset-*)`) под вырез и системные панели;
+- hotkeys/keyring на Android отключены (сид-фраза «Вместе» хранится в файле).
