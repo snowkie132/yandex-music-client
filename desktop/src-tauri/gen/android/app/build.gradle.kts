@@ -18,7 +18,7 @@ android {
     compileSdk = 37
     namespace = "app.mashiro.desktop"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "false"
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
         applicationId = "app.mashiro.desktop"
         minSdk = 24
         targetSdk = 37

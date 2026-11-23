@@ -95,7 +95,11 @@
     <q-tooltip>Очередь треков</q-tooltip>
   </div>
 
-  <div v-else-if="id === 'mini'" :class="iconBtnClass" @click="panels.enterMini()">
+  <div
+    v-else-if="id === 'mini' && !ui.mobile"
+    :class="iconBtnClass"
+    @click="panels.enterMini()"
+  >
     <Icon name="mingcute:miniplayer-fill" :size="18" />
     <q-tooltip>Мини-плеер поверх окон</q-tooltip>
   </div>
@@ -221,6 +225,7 @@ import { useLibraryStore } from "@/stores/library";
 import { usePanelsStore } from "@/stores/panels";
 import { usePlayerStore } from "@/stores/player/index";
 import { useSleepStore } from "@/stores/sleep";
+import { useUiStore } from "@/stores/ui/index";
 import type { PlayerButtonId } from "@/stores/ui/index";
 
 defineProps<{ id: PlayerButtonId }>();
@@ -229,6 +234,7 @@ const player = usePlayerStore();
 const library = useLibraryStore();
 const panels = usePanelsStore();
 const sleep = useSleepStore();
+const ui = useUiStore();
 
 const playClass =
   "flex w-[32px] h-[32px] flex-none items-center justify-center rounded-[calc(var(--radius)*1.5)] bg-[var(--accent)] text-[color:#fff] cursor-pointer [transition:opacity_0.12s_ease,box-shadow_0.2s_ease,transform_0.32s_cubic-bezier(0.34,1.56,0.64,1)] hover:opacity-[0.9] hover:scale-[1.06] active:scale-[0.84] active:duration-[90ms] active:ease-out";

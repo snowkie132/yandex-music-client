@@ -24,7 +24,7 @@
           class="text-[14px] font-semibold tracking-[-0.02em] text-[#a3a3a3]"
           >mashiro</span
         >
-        <WindowControls />
+        <WindowControls v-if="!ui.mobile" />
       </div>
     </q-header>
     <q-page-container>
@@ -122,6 +122,7 @@ import LoginDeviceCode from "@/components/login/LoginDeviceCode.vue";
 import LoginTokenForm from "@/components/login/LoginTokenForm.vue";
 import WindowControls from "@/components/window/WindowControls.vue";
 import { startWindowDrag, toggleWindowMaximize } from "@/lib/window";
+import { useUiStore } from "@/stores/ui/index";
 import { onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
@@ -129,6 +130,7 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 
 type DeviceInfo = { user_code: string; verification_url: string };
 
+const ui = useUiStore();
 const router = useRouter();
 const auth = useAuthStore();
 
