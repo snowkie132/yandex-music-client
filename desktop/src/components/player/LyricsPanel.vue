@@ -947,7 +947,7 @@ function lineMemo(i: number) {
     active ? fill.value : 0,
     active ? dotsFill.value : 0,
     dotsOut.value ? 1 : 0,
-    karaokePop.value ? 1 : 0,
+    karaokePop.value ? popTick.value : 0,
     memoKey.value,
   ];
 }
@@ -1110,6 +1110,7 @@ function buildKaraokeWords(
 }
 
 const playhead = ref(0);
+const popTick = ref(0);
 
 const karaokeWords = computed<KaraokeWord[]>(() => {
   const line = lines.value[player.activeLine];
@@ -1214,6 +1215,9 @@ function tick(stamp = 0) {
     const span = Math.max(320, lineSpan(line, end - start));
     fill.value = Math.min(100, Math.max(0, ((now - start) / span) * 100));
     dotsFill.value = line.text ? 0 : gapProgress(now - start, end - start);
+    // пока последняя буква уменьшается обратно, строка должна перерисовываться
+    const popEnd = start + span + POP_MS * 3;
+    popTick.value = now < popEnd ? Math.round(now / 40) : 0;
   } else {
     fill.value = 0;
     const first = list[0]?.time_ms ?? 0;
@@ -1227,6 +1231,7 @@ function stopTick() {
   raf = 0;
   fill.value = 0;
   dotsFill.value = 0;
+  popTick.value = 0;
 }
 
 watch(

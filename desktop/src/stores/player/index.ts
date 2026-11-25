@@ -184,6 +184,7 @@ let radioStarted = false;
 let previewAdvancing = false;
 let previewFading = false;
 let gaplessSwitching = false;
+let swappingSource = false;
 let previewFadeTimer: number | null = null;
 let previewAdvanceTimer: number | null = null;
 
@@ -416,6 +417,7 @@ export const usePlayerStore = defineStore("player", {
         }
       };
       audio.onended = () => {
+        if (swappingSource || this.loading) return;
         if (this.previewMode) {
           clearPreviewTimers();
           void this.advancePreview();
@@ -1216,6 +1218,14 @@ export const usePlayerStore = defineStore("player", {
         if (!isCurrentToken(token)) return;
         const target = this.muted ? 0 : this.volume;
         cancelFade(fadeMs > 0 && autoplay ? 0 : target);
+        // Сбрасываем прошлый поток целиком: иначе WebKit доигрывает старый
+        // буфер и на смене src выдаёт писк, пока не подтянется новый трек.
+        swappingSource = true;
+        try {
+          audio.pause();
+          audio.removeAttribute("src");
+          audio.load();
+        } catch {}
         audio.src = source;
         audio.playbackRate = this.playbackRate;
         useEqualizerStore().apply();
@@ -1244,6 +1254,7 @@ export const usePlayerStore = defineStore("player", {
           audio.load();
           this.isPlaying = false;
         }
+        swappingSource = false;
         this.persistSession();
         void this.syncTray();
         void this.syncPresence(true);
@@ -1259,6 +1270,7 @@ export const usePlayerStore = defineStore("player", {
         }
         if (this.showLyrics || this.lyricsResumeNext) void this.loadLyrics();
       } catch (e) {
+        swappingSource = false;
         const name = (e as DOMException | undefined)?.name;
         log.error("loadCurrent failed", e);
         if (!isCurrentToken(token) || name === "AbortError") return;
