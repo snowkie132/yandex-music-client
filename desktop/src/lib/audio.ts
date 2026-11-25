@@ -98,6 +98,39 @@ export function setOutputVolume(value: number): void {
   applyVolume(outputVolume);
 }
 
+// Пока меняется src, элемент успевает отдать мусор из недоинициализированного
+// буфера — это и есть щелчок/писк при скипе. Гасим выход до подмены и
+// возвращаем уже после старта воспроизведения.
+let swapMuted = false;
+
+export function holdSilence(): void {
+  swapMuted = true;
+  if (graph) {
+    try {
+      const param = graph.volumeGain.gain;
+      param.cancelScheduledValues(graph.context.currentTime);
+      param.setTargetAtTime(0, graph.context.currentTime, 0.004);
+      return;
+    } catch {}
+  }
+  audio.volume = 0;
+}
+
+export function releaseSilence(target: number, ms = 0): void {
+  if (!swapMuted) return;
+  swapMuted = false;
+  const next = Math.max(0, Math.min(1, target));
+  if (graph) {
+    try {
+      const param = graph.volumeGain.gain;
+      param.cancelScheduledValues(graph.context.currentTime);
+      param.setTargetAtTime(next, graph.context.currentTime, ms > 0 ? ms / 1000 : 0.015);
+      return;
+    } catch {}
+  }
+  audio.volume = next;
+}
+
 export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
 interface Graph {

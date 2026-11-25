@@ -17,6 +17,8 @@ import {
   resetNormalization,
   setNormalization,
   setOutputVolume,
+  holdSilence,
+  releaseSilence,
   ensureAudioRunning,
   safePlay,
   resumeOnGesture,
@@ -449,6 +451,7 @@ export const usePlayerStore = defineStore("player", {
       audio.onplaying = () => {
         stallAt = audio.currentTime;
         stallSince = 0;
+        releaseSilence(this.muted ? 0 : this.volume);
       };
       audio.onerror = () => {
         if (!this.current || this.loading) return;
@@ -1221,6 +1224,7 @@ export const usePlayerStore = defineStore("player", {
         // Сбрасываем прошлый поток целиком: иначе WebKit доигрывает старый
         // буфер и на смене src выдаёт писк, пока не подтянется новый трек.
         swappingSource = true;
+        holdSilence();
         try {
           audio.pause();
           audio.removeAttribute("src");
@@ -1240,6 +1244,7 @@ export const usePlayerStore = defineStore("player", {
         }
         if (autoplay) {
           await safePlay(token);
+          releaseSilence(target, fadeMs > 0 ? Math.min(fadeMs, 2500) : 0);
           if (fadeMs > 0 && isCurrentToken(token)) {
             void fadeIn(target, Math.min(fadeMs, 2500));
           }
@@ -1251,6 +1256,7 @@ export const usePlayerStore = defineStore("player", {
             this.schedulePreview(Math.min(previewDuration, mediaLimit));
           }
         } else {
+          // остаёмся в тишине до фактического старта: гейн вернётся в onplaying
           audio.load();
           this.isPlaying = false;
         }
@@ -1271,6 +1277,7 @@ export const usePlayerStore = defineStore("player", {
         if (this.showLyrics || this.lyricsResumeNext) void this.loadLyrics();
       } catch (e) {
         swappingSource = false;
+        releaseSilence(this.muted ? 0 : this.volume);
         const name = (e as DOMException | undefined)?.name;
         log.error("loadCurrent failed", e);
         if (!isCurrentToken(token) || name === "AbortError") return;
